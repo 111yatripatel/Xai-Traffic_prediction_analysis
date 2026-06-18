@@ -1,235 +1,219 @@
-# Ahmedabad XAI Traffic Intelligence
+# Explainable Traffic Congestion Prediction using XGBoost and SHAP
 
-An explainable traffic-congestion prediction prototype for Ahmedabad corridors. The system combines an XGBoost regression model, SHAP feature attribution, a FastAPI backend, and a React command-center dashboard.
+An explainable machine-learning prototype that predicts traffic congestion for Ahmedabad-style road corridors and shows why the model produced each result.
 
 ## Problem Statement
 
-Traffic prediction models can estimate congestion, but a percentage alone does not tell an operator why the model produced that result. Without an explanation, predictions are harder to validate, communicate, and use in decision support.
+Traffic congestion prediction can support planning and traffic-management decisions, but a prediction alone is difficult to trust. A model may estimate a congestion percentage without explaining which road, speed, weather, event, or time-related conditions influenced it.
+
+This project addresses that limitation by combining traffic prediction with a human-readable explanation for every result.
 
 ## Core Idea
 
-The user selects a traffic scenario containing a corridor, hour, rain condition, and festival/event condition. The backend passes these features to an XGBoost model, classifies the predicted congestion severity, calculates SHAP contributions, and stores a reasoning trace for audit and history.
+The user builds a traffic scenario by selecting a road corridor, hour, rain condition, and festival/event condition. The FastAPI backend prepares the scenario features, runs an XGBoost regression model, classifies the congestion severity, and calculates SHAP feature contributions.
+
+Each prediction produces:
+
+- A congestion percentage
+- A severity level: `LOW`, `MEDIUM`, `HIGH`, or `SEVERE`
+- A human-readable explanation
+- Positive and negative SHAP contributions
+- A counterfactual suggestion
+- A saved reasoning trace for later review
 
 ```text
-Scenario selection
-      |
-      v
-FastAPI prediction request
+Traffic scenario
       |
       v
 XGBoost congestion prediction
       |
       v
-SHAP feature explanation
+SHAP feature contributions
       |
       v
-Saved reasoning trace and decision-support dashboard
+Human-readable explanation and saved reasoning trace
 ```
 
 ## Why Explainability Matters
 
-Explainability helps users distinguish between a model result and the factors that produced it. In this prototype:
+Explainability helps users understand whether a prediction is reasonable instead of treating the model as a black box.
 
-- Positive SHAP values indicate features that pushed predicted congestion higher.
-- Negative SHAP values indicate features that reduced predicted congestion.
-- Counterfactual guidance describes conditions that would need to change to reduce congestion.
-- Saved reasoning traces make previous predictions inspectable and auditable.
+SHAP values describe how much each feature influenced one specific prediction:
 
-## Technology Stack
+- A positive SHAP value increased predicted congestion.
+- A negative SHAP value reduced predicted congestion.
 
-- Backend: Python, FastAPI, Pydantic, Pandas
-- Machine learning: XGBoost, scikit-learn, Joblib
-- Explainability: SHAP TreeExplainer
-- Frontend: React, TypeScript, Vite
-- Storage: processed CSV input and JSON reasoning traces
+For example, the interface can show whether current speed, free-flow speed, rain, corridor patterns, or time-of-day patterns pushed a prediction higher or lower. This makes the result easier to inspect, communicate, and discuss during evaluation.
+
+## Tech Stack
+
+- **Frontend:** React, TypeScript, Vite
+- **Backend:** FastAPI
+- **ML model:** XGBoost
+- **Explainability:** SHAP
+- **Data processing:** Pandas, NumPy
+- **Visualization:** CSS-based dashboard visuals
+
+## Dataset and Features
+
+The prototype uses processed Ahmedabad-style traffic data. Representative features include:
+
+- Corridor
+- Current speed
+- Free-flow speed
+- Hour and cyclical time patterns
+- Rain condition
+- Festival/event condition
+- Morning, evening, and school-hour flags
+- Day-of-week and corridor patterns
+
+The dataset is intended to demonstrate the complete prediction and explainability workflow. It is not a live municipal traffic feed.
 
 ## Features
 
-- Predictions for eight Ahmedabad corridors
-- Scenario controls for corridor, hour, rain, and festival/event activity
-- Four one-click demo scenarios
-- Live network dashboard with severity-colored corridor cards
-- Abstract Ahmedabad map with clickable corridor paths
-- Congestion percentage, severity, confidence, and explanation
-- Visual positive and negative SHAP contribution bars
-- Counterfactual guidance
-- Severe/high congestion anomaly feed
-- Persistent trace history with full trace retrieval
-- Model metadata and feature inventory
-- Responsive loading, empty, and error states
+- Scenario-based traffic congestion prediction
+- Congestion severity classification
+- SHAP-based feature explanations
+- Human-readable prediction reasoning
+- Positive and negative SHAP contribution bars
+- Saved reasoning trace history
+- Counterfactual congestion guidance
+- Traffic alerts
+- Corridor ranking and network analytics
+- Abstract clickable corridor map
+- Four one-click demo presets
+- Responsive guided demo interface
 
-## Project Structure
+## Backend APIs
 
-```text
-Xai-Reasoning Traces/
-|-- backend/
-|   |-- app/
-|   |   `-- main.py                     # Active FastAPI entry point
-|   `-- main.py                         # Alternate backend module
-|-- data/
-|   `-- processed/
-|       `-- ahmedabad_training_data.csv
-|-- frontend/
-|   |-- public/
-|   |-- src/
-|   |   |-- App.tsx                     # UI and typed API integration
-|   |   |-- App.css                     # Dashboard visual system
-|   |   |-- index.css
-|   |   `-- main.tsx
-|   |-- index.html
-|   `-- package.json
-|-- models/
-|   |-- model_features.pkl
-|   `-- xgboost_traffic_model.pkl
-|-- outputs/
-|   `-- traces/                         # Saved reasoning traces
-|-- notebooks/
-|-- tests/
-|-- train_model.py
-|-- generate_trace.py
-|-- requirements.txt
-`-- README.md
-```
-
-## Setup
-
-Run the following commands from the project root using PowerShell.
-
-### Python environment
-
-```powershell
-python -m venv venv
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-### Frontend dependencies
-
-```powershell
-cd frontend
-npm.cmd install
-cd ..
-```
-
-## Run the Project
-
-Open two terminals.
-
-### Backend
-
-From the project root:
-
-```powershell
-.\venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Useful backend URLs:
-
-- API root: `http://127.0.0.1:8000`
-- Health check: `http://127.0.0.1:8000/health`
-- Interactive documentation: `http://127.0.0.1:8000/docs`
-
-### Frontend
-
-```powershell
-cd frontend
-npm.cmd run dev
-```
-
-Open the URL printed by Vite, normally:
-
-```text
-http://localhost:5173
-```
-
-## API Endpoints
+The active FastAPI application is `backend.app.main:app`.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/` | Basic API status |
-| `GET` | `/health` | Backend and model health |
-| `GET` | `/api/v1/segments` | Supported corridor identifiers |
-| `POST` | `/api/v1/predict` | Generate one prediction and reasoning trace |
-| `GET` | `/api/v1/dashboard` | Predict all eight corridors for one scenario |
-| `GET` | `/api/v1/anomalies` | Return demo-friendly congestion alerts |
-| `GET` | `/api/v1/traces?limit=10` | List recent traces |
-| `GET` | `/api/v1/traces/{trace_id}` | Retrieve a complete trace |
-| `GET` | `/api/v1/model-info` | Return model and feature metadata |
+| `GET` | `/health` | Check API, model, and data availability |
+| `GET` | `/api/v1/segments` | List supported corridor identifiers |
+| `POST` | `/api/v1/predict` | Generate a prediction and SHAP reasoning trace |
+| `GET` | `/api/v1/dashboard` | Generate corridor-level dashboard predictions |
+| `GET` | `/api/v1/anomalies` | Return traffic alerts derived from predictions |
+| `GET` | `/api/v1/traces` | List recent reasoning traces |
+| `GET` | `/api/v1/traces/{trace_id}` | Retrieve one complete reasoning trace |
+| `GET` | `/api/v1/model-info` | Return model, feature, and prototype metadata |
 
 Example prediction request:
 
 ```json
 {
-  "corridor_name": "SG_Highway",
+  "corridor_name": "Sardar_Patel_Ring",
   "hour": 8,
   "is_rain": true,
   "is_festival": false
 }
 ```
 
-## Demo Scenario
+Example response shape:
 
-### SG Highway, 8 AM, Rain Detected
-
-1. Start the backend and frontend.
-2. Open `http://localhost:5173`.
-3. Click **Morning Rain on SG Highway**, or configure the scenario manually:
-   - Select **SG Highway**.
-   - Set the hour to **08:00**.
-   - Turn **Rain** on.
-   - Leave **Festival / event** off.
-4. Click **Run prediction**.
-5. Explain the congestion percentage and severity returned by XGBoost.
-6. Point to the SHAP bars:
-   - Positive values push congestion higher.
-   - Negative values reduce predicted congestion.
-7. Explain the counterfactual as a description of what could change to reduce congestion.
-8. Open the newest trace in **Recent trace history** to show that the reasoning result was saved.
-9. Refresh the live dashboard to compare all eight corridors under the same scenario.
-
-## Additional Demo Presets
-
-- Morning Rain on SG Highway
-- Festival Evening at Stadium Motera
-- Normal Afternoon on CG Road
-- Rush Hour on Ashram Road
-
-Each preset fills the scenario controls and immediately runs a focused prediction.
-
-## Verification
-
-Frontend:
-
-```powershell
-cd frontend
-npm.cmd run lint
-npm.cmd run build
+```json
+{
+  "prediction": {
+    "congestion_pct": 63.74,
+    "label": "HIGH"
+  },
+  "trace_id": "...",
+  "segment_id": "Sardar_Patel_Ring",
+  "explanation": "...",
+  "top_factors": [],
+  "counterfactual": "..."
+}
 ```
 
-Backend syntax:
+Interactive API documentation is available at `http://127.0.0.1:8000/docs` while the backend is running.
+
+## How to Run
+
+Open two PowerShell terminals.
+
+### Backend
 
 ```powershell
-.\venv\Scripts\python.exe -m py_compile backend\app\main.py
+cd "D:\xai-project\Xai-Reasoning Traces"
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+If the environment has not been created yet:
+
+```powershell
+cd "D:\xai-project\Xai-Reasoning Traces"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+### Frontend
+
+```powershell
+cd "D:\xai-project\Xai-Reasoning Traces\frontend"
+npm install
+npm run dev
+```
+
+### Browser
+
+Open:
+
+```text
+http://localhost:5173
+```
+
+## Demo Presets
+
+The scenario section includes four presentation-friendly presets:
+
+- **Morning Rain — SG Highway**
+- **Festival Evening — Stadium Motera**
+- **Rush Hour — Sardar Patel Ring Road**
+- **Normal Afternoon — CG Road**
+
+Selecting a preset updates all scenario controls, runs the prediction automatically, highlights the selected corridor, and opens the prediction and SHAP reasoning flow.
+
+## Final Demo Script
+
+### Scenario
+
+**Sardar Patel Ring Road, 8 AM, Rain On**
+
+1. Open the dashboard at `http://localhost:5173`.
+2. Select **Sardar Patel Ring Road** from the corridor list.
+3. Set the hour to **8 AM**.
+4. Turn **Rain** on.
+5. Keep **Festival / event** off.
+6. Click **Run Prediction**.
+7. Show the predicted congestion percentage.
+8. Show the congestion severity level.
+9. Explain the SHAP factors, such as current speed, free-flow speed, rain condition, corridor pattern, and time-of-day pattern.
+10. Point out that positive SHAP values increased predicted congestion and negative values reduced it.
+11. Open **Recent Saved Explanations** and select the newest reasoning trace to demonstrate that the explanation was saved.
+
+For a faster presentation, click **Rush Hour — Sardar Patel Ring Road**. The preset applies the same scenario and runs the prediction automatically.
+
+> Prediction values may vary between requests because the prototype selects a representative processed row for the chosen corridor before applying the scenario conditions.
 
 ## Limitations
 
-This is a prototype using processed and Ahmedabad-style mapped traffic features. It is not a deployed city-scale traffic system.
+> This is a prototype using processed Ahmedabad-style traffic features. It demonstrates explainable traffic prediction and is not a live deployed city traffic system.
 
-Additional limitations:
+Additional practical limitations:
 
-- The dashboard does not consume live municipal traffic sensors.
-- The map is an abstract corridor visualization, not a navigation-grade geospatial map.
-- Confidence values come from the prototype dataset rather than a separately calibrated uncertainty model.
-- Counterfactual guidance is explanatory rule-based text, not an optimized traffic-control intervention.
-- JSON files are suitable for MVP trace storage but not high-volume production workloads.
-- Predictions should be treated as demonstrations of the ML/XAI workflow rather than real-time travel guidance.
+- The dashboard does not consume live traffic sensors or municipal APIs.
+- The corridor map is an abstract visualization and is not navigation-grade GIS data.
+- SHAP explains model behavior; it does not prove that a feature caused real-world congestion.
+- Counterfactual guidance is explanatory prototype text rather than an optimized traffic-control plan.
+- Predictions should not be used as live travel or public-safety guidance.
 
 ## Future Improvements
 
-- Integrate validated live or periodically updated traffic feeds.
-- Add geospatial corridor geometry and map tiles.
-- Calibrate predictive uncertainty independently from model confidence.
-- Generate data-driven counterfactual scenarios with feasibility constraints.
-- Add automated backend and browser interaction tests.
-- Evaluate model drift and explanation stability over time.
-- Introduce production storage only if deployment scale requires it.
+- Real-time traffic API integration
+- GIS mapping with Leaflet and OpenStreetMap
+- A larger real-world traffic dataset
+- Model comparison and evaluation
+- Application deployment
