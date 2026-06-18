@@ -2631,18 +2631,61 @@ body {
 }
 
 .preset-row {
-  grid-template-columns: 125px 1fr;
+  grid-template-columns: minmax(190px, .55fr) minmax(0, 1.45fr);
+  align-items: start;
+  gap: 18px;
   padding-top: 18px;
 }
 
-.preset-row > span {
-  font-size: 10px;
+.preset-intro {
+  display: grid;
+  gap: 5px;
 }
 
-.preset-row button {
-  min-height: 38px;
-  border-radius: 10px;
+.preset-intro > span {
+  color: var(--primary-dark);
+  font: 600 10px "IBM Plex Mono", monospace;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.preset-intro small {
+  max-width: 280px;
+  color: var(--muted);
   font-size: 11px;
+  line-height: 1.45;
+}
+
+.preset-row .preset-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preset-row .preset-buttons button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-color: var(--border);
+  border-radius: 10px;
+  background: #fbfcfc;
+  color: #4d685e;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.preset-row .preset-buttons button:hover:not(:disabled) {
+  border-color: #9cbcaf;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.preset-row .preset-buttons button.is-active {
+  border-color: #82a999;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  box-shadow: inset 3px 0 var(--primary);
 }
 
 .reasoning-panel {
@@ -3005,6 +3048,18 @@ body {
 
   .secondary-heading {
     align-items: flex-start;
+  }
+
+  .preset-row {
+    grid-template-columns: 1fr;
+  }
+
+  .preset-intro small {
+    max-width: none;
+  }
+
+  .preset-row .preset-buttons {
+    grid-template-columns: 1fr;
   }
 
   .shap-row {

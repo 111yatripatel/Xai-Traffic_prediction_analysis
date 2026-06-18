@@ -158,10 +158,10 @@ const MAP_ROADS = [
 ] as const;
 
 const DEMO_PRESETS: DemoPreset[] = [
-  { label: "Morning Rain on SG Highway", corridorName: "SG_Highway", hour: 8, isRain: true, isFestival: false },
-  { label: "Festival Evening near Stadium Motera", corridorName: "Stadium_Motera", hour: 19, isRain: false, isFestival: true },
-  { label: "Normal Afternoon on CG Road", corridorName: "CG_Road", hour: 14, isRain: false, isFestival: false },
-  { label: "Evening Rush on Ashram Road", corridorName: "Ashram_Road", hour: 18, isRain: false, isFestival: false },
+  { label: "Morning Rain — SG Highway", corridorName: "SG_Highway", hour: 8, isRain: true, isFestival: false },
+  { label: "Festival Evening — Stadium Motera", corridorName: "Stadium_Motera", hour: 18, isRain: false, isFestival: true },
+  { label: "Rush Hour — Sardar Patel Ring Road", corridorName: "Sardar_Patel_Ring", hour: 8, isRain: true, isFestival: false },
+  { label: "Normal Afternoon — CG Road", corridorName: "CG_Road", hour: 14, isRain: false, isFestival: false },
 ];
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -403,12 +403,16 @@ function App() {
     }
   }
 
-  function runPreset(preset: DemoPreset) {
+  async function runPreset(preset: DemoPreset) {
     setActiveCorridor(preset.corridorName);
     setHour(preset.hour);
     setIsRain(preset.isRain);
     setIsFestival(preset.isFestival);
-    void selectCorridor(preset.corridorName, preset);
+    await selectCorridor(preset.corridorName, preset);
+    document.querySelector(".reasoning-panel")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   }
 
   async function selectTrace(traceId: string) {
@@ -464,6 +468,14 @@ function App() {
     is_rain: isRain,
     is_festival: isFestival,
   };
+  const activePreset = DEMO_PRESETS.find(
+    (preset) => (
+      preset.corridorName === activeCorridor
+      && preset.hour === hour
+      && preset.isRain === isRain
+      && preset.isFestival === isFestival
+    ),
+  );
 
   return (
     <main className="app-shell">
@@ -577,10 +589,19 @@ function App() {
           </div>
         </div>
         <div className="preset-row">
-          <span>Try a demo scenario</span>
-          <div>
+          <div className="preset-intro">
+            <span>Quick demo presets</span>
+            <small>Use a preset for a quick demo, or build your own traffic scenario manually.</small>
+          </div>
+          <div className="preset-buttons">
             {DEMO_PRESETS.map((preset) => (
-              <button key={preset.label} onClick={() => runPreset(preset)} disabled={detailLoading}>
+              <button
+                className={activePreset?.label === preset.label ? "is-active" : ""}
+                key={preset.label}
+                onClick={() => void runPreset(preset)}
+                disabled={detailLoading}
+                aria-pressed={activePreset?.label === preset.label}
+              >
                 {preset.label}
               </button>
             ))}
@@ -813,7 +834,7 @@ function App() {
 
               <div className="shap-section">
                 <div className="block-title-row">
-                  <span className="step-label">Step 3 · Understand Why</span>
+                  <span className="step-label">Step 3 · Understand SHAP Reasoning</span>
                   <small>Feature contribution</small>
                 </div>
                 <p className="explanation-note">
