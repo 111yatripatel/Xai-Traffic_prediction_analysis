@@ -26,6 +26,20 @@ type CorridorDashboardItem = {
 type DashboardResponse = {
   generated_at: string;
   count: number;
+  scenario?: {
+    hour: number;
+    is_rain: boolean;
+    is_festival: boolean;
+  };
+  summary?: {
+    total_corridors: number;
+    low: number;
+    medium: number;
+    high: number;
+    severe: number;
+    average_congestion: number;
+    highest_congestion_corridor: string | null;
+  };
   corridors: CorridorDashboardItem[];
 };
 
@@ -39,6 +53,8 @@ type PredictionResponse = {
   explanation: string;
   top_factors: ShapFactor[];
   counterfactual: string;
+  confidence?: number | null;
+  predicted_at?: string;
 };
 
 type FullTraceResponse = {
@@ -85,6 +101,15 @@ type AnomaliesResponse = {
   anomalies: Anomaly[];
 };
 
+type ModelInfoResponse = {
+  model_type: string;
+  xai_method: string;
+  target: string;
+  features: string[];
+  corridors: string[];
+  prototype_note: string;
+};
+
 type ReasoningView = {
   traceId: string;
   corridorName: string;
@@ -95,6 +120,14 @@ type ReasoningView = {
   counterfactual: string;
   confidence?: number | null;
   predictedAt?: string;
+};
+
+type DemoPreset = {
+  label: string;
+  corridorName: string;
+  hour: number;
+  isRain: boolean;
+  isFestival: boolean;
 };
 
 const DISPLAY_NAMES: Record<string, string> = {
@@ -118,6 +151,37 @@ const MAP_ROADS = [
   { id: "Maninagar", path: "M 287 248 C 313 268, 332 296, 344 331", label: [321, 337] },
   { id: "Stadium_Motera", path: "M 226 87 C 242 103, 262 112, 285 115", label: [310, 109] },
 ] as const;
+
+const DEMO_PRESETS: DemoPreset[] = [
+  {
+    label: "Morning Rain on SG Highway",
+    corridorName: "SG_Highway",
+    hour: 8,
+    isRain: true,
+    isFestival: false,
+  },
+  {
+    label: "Festival Evening at Stadium Motera",
+    corridorName: "Stadium_Motera",
+    hour: 19,
+    isRain: false,
+    isFestival: true,
+  },
+  {
+    label: "Normal Afternoon on CG Road",
+    corridorName: "CG_Road",
+    hour: 14,
+    isRain: false,
+    isFestival: false,
+  },
+  {
+    label: "Rush Hour on Ashram Road",
+    corridorName: "Ashram_Road",
+    hour: 18,
+    isRain: false,
+    isFestival: false,
+  },
+];
 
 function formatFeatureName(feature: string) {
   return feature.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -186,11 +250,14 @@ function App() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [traces, setTraces] = useState<TraceListItem[]>([]);
+  const [modelInfo, setModelInfo] = useState<ModelInfoResponse | null>(null);
   const [activeCorridor, setActiveCorridor] = useState("SG_Highway");
   const [reasoning, setReasoning] = useState<ReasoningView | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [feedsLoading, setFeedsLoading] = useState(true);
+  const [modelInfoLoading, setModelInfoLoading] = useState(true);
+  const [apiOnline, setApiOnline] = useState(false);
   const [error, setError] = useState("");
 
   const corridorLookup = useMemo(
@@ -208,6 +275,7 @@ function App() {
         is_festival: String(isFestival),
       });
       const data = await getJson<DashboardResponse>(`/api/v1/dashboard?${query}`);
+      setApiOnline(true);
       setDashboard(data);
       const active = data.corridors.find((item) => item.corridor_name === activeCorridor) ?? data.corridors[0];
       if (active) {
@@ -227,6 +295,7 @@ function App() {
       const traceData = await getJson<TraceListResponse>("/api/v1/traces?limit=10");
       setTraces(traceData.traces);
     } catch {
+      setApiOnline(false);
       setError("Live traffic data is unavailable. Confirm the FastAPI service is running on port 8000.");
     } finally {
       setDashboardLoading(false);
@@ -235,18 +304,31 @@ function App() {
 
   const loadFeeds = useCallback(async () => {
     setFeedsLoading(true);
-    try {
-      const [anomalyData, traceData] = await Promise.all([
-        getJson<AnomaliesResponse>("/api/v1/anomalies"),
-        getJson<TraceListResponse>("/api/v1/traces?limit=10"),
-      ]);
-      setAnomalies(anomalyData.anomalies);
-      setTraces(traceData.traces);
-    } catch {
-      setError("Some operational feeds could not be loaded.");
-    } finally {
-      setFeedsLoading(false);
+    setModelInfoLoading(true);
+    const [anomalyResult, traceResult, modelResult] = await Promise.allSettled([
+      getJson<AnomaliesResponse>("/api/v1/anomalies"),
+      getJson<TraceListResponse>("/api/v1/traces?limit=10"),
+      getJson<ModelInfoResponse>("/api/v1/model-info"),
+    ]);
+
+    if (anomalyResult.status === "fulfilled") {
+      setAnomalies(anomalyResult.value.anomalies);
     }
+    if (traceResult.status === "fulfilled") {
+      setTraces(traceResult.value.traces);
+    }
+    if (modelResult.status === "fulfilled") {
+      setModelInfo(modelResult.value);
+    }
+
+    if (
+      anomalyResult.status === "rejected"
+      && traceResult.status === "rejected"
+    ) {
+      setError("Some operational feeds could not be loaded.");
+    }
+    setFeedsLoading(false);
+    setModelInfoLoading(false);
   }, []);
 
   useEffect(() => {
@@ -259,7 +341,13 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function selectCorridor(corridorName: string) {
+  async function selectCorridor(
+    corridorName: string,
+    scenario?: Pick<DemoPreset, "hour" | "isRain" | "isFestival">,
+  ) {
+    const selectedHour = scenario?.hour ?? hour;
+    const selectedRain = scenario?.isRain ?? isRain;
+    const selectedFestival = scenario?.isFestival ?? isFestival;
     setActiveCorridor(corridorName);
     setDetailLoading(true);
     setError("");
@@ -269,9 +357,9 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           corridor_name: corridorName,
-          hour,
-          is_rain: isRain,
-          is_festival: isFestival,
+          hour: selectedHour,
+          is_rain: selectedRain,
+          is_festival: selectedFestival,
         }),
       });
       setReasoning({
@@ -282,6 +370,8 @@ function App() {
         explanation: data.explanation,
         factors: data.top_factors,
         counterfactual: data.counterfactual,
+        confidence: data.confidence,
+        predictedAt: data.predicted_at,
       });
       const traceData = await getJson<TraceListResponse>("/api/v1/traces?limit=10");
       setTraces(traceData.traces);
@@ -290,6 +380,14 @@ function App() {
     } finally {
       setDetailLoading(false);
     }
+  }
+
+  function runPreset(preset: DemoPreset) {
+    setActiveCorridor(preset.corridorName);
+    setHour(preset.hour);
+    setIsRain(preset.isRain);
+    setIsFestival(preset.isFestival);
+    void selectCorridor(preset.corridorName, preset);
   }
 
   async function selectTrace(traceId: string) {
@@ -331,15 +429,56 @@ function App() {
           <div>
             <p className="eyebrow">Ahmedabad traffic command / XAI-01</p>
             <h1>Ahmedabad XAI Traffic Intelligence</h1>
-            <p className="subtitle">Live congestion prediction with SHAP-based reasoning traces</p>
+            <p className="subtitle">Predict traffic congestion and understand every prediction using SHAP-based reasoning traces.</p>
           </div>
         </div>
         <div className="system-status">
           <span className="status-dot" />
-          <span>Model online</span>
-          <small> XGBoost · SHAP</small>
+          <span>{apiOnline ? "Model online" : "Connecting"}</span>
+          <small>{modelInfo ? `${modelInfo.model_type} · SHAP` : "API · 127.0.0.1:8000"}</small>
         </div>
       </header>
+
+      <section className="hero-explainer panel" aria-labelledby="how-it-works-title">
+        <div className="hero-flow">
+          <div className="hero-flow-copy">
+            <p className="section-kicker">How the system works</p>
+            <h2 id="how-it-works-title">From traffic context to an explainable decision</h2>
+          </div>
+          <div className="flow-steps five-step-flow" aria-label="Explainable prediction workflow">
+            {[
+              "Select Scenario",
+              "FastAPI Request",
+              "XGBoost Prediction",
+              "SHAP Explanation",
+              "Saved Audit Trace",
+            ].map((step, index) => (
+              <div className="flow-step" key={step}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <strong>{step}</strong>
+                {index < 4 && <i aria-hidden="true">→</i>}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="explanation-cards">
+          <article>
+            <span>01 / Input scenario</span>
+            <strong>Describe the traffic context</strong>
+            <p>Choose a corridor, hour, rain condition, and event activity before running the model.</p>
+          </article>
+          <article>
+            <span>02 / Prediction</span>
+            <strong>Estimate congestion severity</strong>
+            <p>XGBoost returns a congestion percentage and classifies it from LOW through SEVERE.</p>
+          </article>
+          <article>
+            <span>03 / Reasoning trace</span>
+            <strong>Understand why it happened</strong>
+            <p>SHAP shows which traffic features pushed the result upward or helped reduce congestion.</p>
+          </article>
+        </div>
+      </section>
 
       {error && (
         <div className="error-banner" role="alert">
@@ -348,26 +487,56 @@ function App() {
         </div>
       )}
 
-      <section className="scenario-bar" aria-label="Scenario controls">
-        <div className="scenario-heading">
-          <span>Scenario</span>
-          <small>Adjust model context</small>
+      <section className="scenario-workbench panel" aria-label="Scenario controls">
+        <div className="scenario-intro">
+          <p className="section-kicker">Step 01 / Configure input</p>
+          <h2>Build a traffic scenario</h2>
+          <p>Select a corridor and operating conditions, then run one focused prediction or refresh the full network.</p>
         </div>
-        <label className="hour-control">
-          <span className="hour-label">Hour</span>
-          <input type="range" min="0" max="23" value={hour} onChange={(event) => setHour(Number(event.target.value))} />
-          <output>{String(hour).padStart(2, "0")}:00</output>
-        </label>
-        <Toggle checked={isRain} onChange={setIsRain} label="Rain" icon="rain" />
-        <Toggle checked={isFestival} onChange={setIsFestival} label="Festival / event" icon="event" />
-        <button className="refresh-button" onClick={() => void loadDashboard()} disabled={dashboardLoading}>
-          <StatusIcon type="refresh" />
-          {dashboardLoading ? "Updating network" : "Refresh dashboard"}
-        </button>
-        <div className="scenario-summary">
-          <span><strong>{dashboard?.count ?? "—"}</strong> corridors</span>
-          <span><strong>{networkAverage.toFixed(1)}%</strong> network avg.</span>
-          <span><strong>{severeCount}</strong> severe</span>
+        <div className="scenario-controls">
+          <label className="corridor-control">
+            <span>Corridor</span>
+            <select value={activeCorridor} onChange={(event) => setActiveCorridor(event.target.value)}>
+              {MAP_ROADS.map((road) => (
+                <option key={road.id} value={road.id}>{DISPLAY_NAMES[road.id]}</option>
+              ))}
+            </select>
+          </label>
+          <label className="hour-control">
+            <span className="hour-label">Hour</span>
+            <input type="range" min="0" max="23" value={hour} onChange={(event) => setHour(Number(event.target.value))} />
+            <output>{String(hour).padStart(2, "0")}:00</output>
+          </label>
+          <Toggle checked={isRain} onChange={setIsRain} label="Rain" icon="rain" />
+          <Toggle checked={isFestival} onChange={setIsFestival} label="Festival / event" icon="event" />
+        </div>
+        <div className="scenario-actions">
+          <button className="primary-action" onClick={() => void selectCorridor(activeCorridor)} disabled={detailLoading}>
+            {detailLoading ? "Running model" : "Run prediction"}
+          </button>
+          <button className="refresh-button" onClick={() => void loadDashboard()} disabled={dashboardLoading}>
+            <StatusIcon type="refresh" />
+            {dashboardLoading ? "Updating network" : "Refresh live dashboard"}
+          </button>
+          <div className="scenario-summary">
+            <span><strong>{dashboard?.count ?? "—"}</strong> corridors</span>
+            <span><strong>{networkAverage.toFixed(1)}%</strong> network avg.</span>
+            <span><strong>{severeCount}</strong> severe</span>
+          </div>
+        </div>
+        <div className="preset-row">
+          <span>Demo scenarios</span>
+          <div>
+            {DEMO_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                onClick={() => runPreset(preset)}
+                disabled={detailLoading}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -495,6 +664,9 @@ function App() {
                   <span className="block-label">SHAP contribution profile</span>
                   <small>← reduces / increases →</small>
                 </div>
+                <p className="explanation-note">
+                  Positive SHAP values push congestion higher. Negative SHAP values reduce predicted congestion.
+                </p>
                 <div className="shap-axis"><i /><span /></div>
                 <div className="shap-list">
                   {reasoning.factors.map((factor, index) => {
@@ -527,6 +699,7 @@ function App() {
 
               <div className="counterfactual-block">
                 <span className="block-label">Counterfactual guidance</span>
+                <small>Counterfactual explains what would need to change to reduce congestion.</small>
                 <p>{reasoning.counterfactual}</p>
               </div>
 
@@ -539,26 +712,6 @@ function App() {
             <div className="empty-state">Select any road on the network map to generate its reasoning trace.</div>
           )}
         </article>
-      </section>
-
-      <section className="system-flow panel" aria-labelledby="system-flow-title">
-        <div className="flow-copy">
-          <p className="section-kicker">Explainable pipeline</p>
-          <h2 id="system-flow-title">System Flow</h2>
-          <p>
-            This prototype predicts congestion for Ahmedabad corridors and generates
-            SHAP-based reasoning traces to explain why each prediction was made.
-          </p>
-        </div>
-        <div className="flow-steps" aria-label="Dataset to decision-support pipeline">
-          {["Dataset", "XGBoost Prediction", "SHAP Reasoning Trace", "Traffic Decision Support"].map((step, index) => (
-            <div className="flow-step" key={step}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{step}</strong>
-              {index < 3 && <i aria-hidden="true">→</i>}
-            </div>
-          ))}
-        </div>
       </section>
 
       <section className="corridor-section">
@@ -658,12 +811,47 @@ function App() {
                     </div>
                     <div className="trace-metric">
                       <strong>{trace.congestion_pct.toFixed(1)}%</strong>
-                      <span>Open trace</span>
+                      <span className={`severity-text ${trace.label.toLowerCase()}`}>{trace.label}</span>
+                      <em>Open trace</em>
                     </div>
                   </button>
                 ))}
           </div>
         </article>
+      </section>
+
+      <section className="model-info-panel panel">
+        <div className="model-info-heading">
+          <div>
+            <p className="section-kicker">Model transparency</p>
+            <h2>What powers this prototype</h2>
+            <p>The model metadata below is loaded directly from the backend.</p>
+          </div>
+          <span className="api-source">GET /api/v1/model-info</span>
+        </div>
+        {modelInfoLoading ? (
+          <div className="model-info-loading">
+            <Skeleton className="large" />
+            <Skeleton className="large" />
+            <Skeleton className="large" />
+          </div>
+        ) : modelInfo ? (
+          <div className="model-info-grid">
+            <article><span>Prediction model</span><strong>{modelInfo.model_type}</strong></article>
+            <article><span>Explainability method</span><strong>{modelInfo.xai_method}</strong></article>
+            <article><span>Prediction target</span><strong>{formatFeatureName(modelInfo.target)}</strong></article>
+            <article className="feature-inventory">
+              <span>Features used · {modelInfo.features.length}</span>
+              <div>{modelInfo.features.map((feature) => <em key={feature}>{formatFeatureName(feature)}</em>)}</div>
+            </article>
+            <p className="prototype-note">{modelInfo.prototype_note}</p>
+          </div>
+        ) : (
+          <div className="feed-empty">
+            <strong>Model information unavailable</strong>
+            <span>Confirm the backend exposes /api/v1/model-info.</span>
+          </div>
+        )}
       </section>
 
       <footer className="app-footer">

@@ -471,3 +471,17 @@ def get_anomalies():
         "count": len(anomalies),
         "anomalies": anomalies,
     }
+
+
+@app.get("/api/v1/model-info")
+def get_model_info():
+    return {
+        "model_type": "XGBoost Regressor",
+        "xai_method": "SHAP TreeExplainer",
+        "target": "congestion_pct",
+        "features": features,
+        "corridors": corridor_names,
+        "prototype_note": (
+            "Prototype using processed Ahmedabad-style traffic features."
+        ),
+    }
