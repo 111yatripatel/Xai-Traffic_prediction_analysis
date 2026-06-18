@@ -1,0 +1,45 @@
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Environment - NEVER commit this
+.env
+
+# Raw data files - too large for Git
+data/raw/
+
+# Generated output traces/charts
+outputs/traces/
+outputs/*.png
+outputs/*.json
+
+# Keep trained model files if small and needed for demo
+# If models become too large, uncomment this:
+# models/*.pkl
+
+# Graph/network files
+*.graphml
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node frontend dependencies
+node_modules/
+frontend/node_modules/
+
+# Frontend build output
+dist/
+build/
+frontend/dist/
