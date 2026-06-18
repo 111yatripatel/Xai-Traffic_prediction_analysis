@@ -7,6 +7,7 @@ type Severity = "LOW" | "MEDIUM" | "HIGH" | "SEVERE";
 
 type ShapFactor = {
   feature: string;
+  display_name?: string;
   value: number | string | boolean | null;
   shap: number;
   impact: string;
@@ -44,15 +45,19 @@ type DashboardResponse = {
 };
 
 type PredictionResponse = {
-  prediction: {
-    congestion_pct: number;
-    label: Severity;
+  prediction?: {
+    congestion_pct?: number;
+    label?: Severity;
   };
-  trace_id: string;
-  segment_id: string;
-  explanation: string;
-  top_factors: ShapFactor[];
-  counterfactual: string;
+  congestion_pct?: number;
+  severity?: Severity;
+  label?: Severity;
+  trace_id?: string;
+  segment_id?: string;
+  display_name?: string;
+  explanation?: string;
+  top_factors?: ShapFactor[];
+  counterfactual?: string;
   confidence?: number | null;
   predicted_at?: string;
 };
@@ -164,18 +169,29 @@ const FEATURE_LABELS: Record<string, string> = {
   freeflow_speed: "Free-flow Speed",
   is_morning_rush: "Morning Rush",
   is_evening_rush: "Evening Rush",
-  is_school_hour: "School Hours",
-  is_rain: "Rain Detected",
+  is_school_hour: "School Hour",
+  is_rain: "Rain Condition",
   is_festival: "Festival/Event",
   hour: "Hour of Day",
   corridor_id: "Corridor Pattern",
-  hour_sin: "Time Cycle (Sine)",
-  hour_cos: "Time Cycle (Cosine)",
+  hour_sin: "Time of Day Pattern",
+  hour_cos: "Time of Day Pattern",
+  weekday: "Day of Week",
 };
 
 function formatFeatureName(feature: string) {
   return FEATURE_LABELS[feature]
     ?? feature.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatExplanation(explanation: string) {
+  return Object.entries(FEATURE_LABELS).reduce(
+    (formatted, [feature, label]) => formatted.replace(
+      new RegExp(`\\b${feature}\\b`, "g"),
+      label,
+    ),
+    explanation,
+  );
 }
 
 function formatTime(value?: string) {
@@ -364,14 +380,17 @@ function App() {
           is_festival: selectedFestival,
         }),
       });
+      const congestionPct = data.prediction?.congestion_pct ?? data.congestion_pct ?? 0;
+      const severity = data.prediction?.label ?? data.severity ?? data.label ?? "LOW";
+      const resultCorridor = data.display_name || data.segment_id || corridorName;
       setReasoning({
-        traceId: data.trace_id,
-        corridorName: data.segment_id,
-        congestionPct: data.prediction.congestion_pct,
-        severity: data.prediction.label,
-        explanation: data.explanation,
-        factors: data.top_factors,
-        counterfactual: data.counterfactual,
+        traceId: data.trace_id ?? "pending-trace",
+        corridorName: resultCorridor,
+        congestionPct,
+        severity,
+        explanation: formatExplanation(data.explanation ?? "The model returned a prediction without a text explanation."),
+        factors: data.top_factors ?? [],
+        counterfactual: data.counterfactual ?? "No counterfactual suggestion was returned for this prediction.",
         confidence: data.confidence,
         predictedAt: data.predicted_at,
       });
@@ -782,9 +801,8 @@ function App() {
                   <strong>{reasoning.congestionPct.toFixed(1)}<small>%</small></strong>
                 </div>
                 <div className="confidence-block">
-                  <span>Model confidence</span>
-                  <strong>{reasoning.confidence != null ? `${Math.round(reasoning.confidence * 100)}%` : "Calibrated"}</strong>
-                  <div><i style={{ width: reasoning.confidence != null ? `${reasoning.confidence * 100}%` : "85%" }} /></div>
+                  <span>Prototype model output</span>
+                  <p className="confidence-status">Model response received</p>
                 </div>
               </div>
 
@@ -799,7 +817,8 @@ function App() {
                   <small>Feature contribution</small>
                 </div>
                 <p className="explanation-note">
-                  Positive = increases congestion. Negative = decreases congestion.
+                  SHAP values show how much each feature influenced this specific prediction.
+                  Positive values increased predicted congestion; negative values reduced it.
                 </p>
                 <div className="shap-axis"><i /><span /></div>
                 <div className="shap-list">
@@ -809,8 +828,8 @@ function App() {
                     return (
                       <div className="shap-row" key={`${factor.feature}-${index}`}>
                         <div className="factor-meta">
-                          <strong>{formatFeatureName(factor.feature)}</strong>
-                          <span>Value: {String(factor.value)} · {factor.shap >= 0 ? "Increased congestion" : "Reduced congestion"}</span>
+                          <strong>{factor.display_name ?? formatFeatureName(factor.feature)}</strong>
+                          <span>Value: {String(factor.value)} · {factor.shap >= 0 ? "Increased predicted congestion" : "Reduced predicted congestion"}</span>
                         </div>
                         <div className="shap-visual">
                           <span className="axis-center" />
@@ -849,6 +868,15 @@ function App() {
             </div>
           )}
         </article>
+      </section>
+
+      <section className="secondary-heading" aria-labelledby="supporting-dashboard-title">
+        <div>
+          <p className="section-kicker">Explore the wider system</p>
+          <h2 id="supporting-dashboard-title">Supporting dashboard</h2>
+          <p>Once you understand the prediction, use these views to compare corridors, inspect the network, and revisit saved traces.</p>
+        </div>
+        <span>Secondary views</span>
       </section>
 
       <section className="corridor-section">

@@ -2172,7 +2172,7 @@ p {
 }
 
 .prediction-headline::after {
-  content: "XGBoost predicts a congestion percentage and assigns a severity level. The confidence meter reflects the prototype data confidence.";
+  content: "XGBoost predicts a congestion percentage and assigns a severity level. The explanation below shows which inputs influenced this result.";
   min-height: 95px;
   display: flex;
   align-items: center;
@@ -2377,5 +2377,646 @@ p {
 
   .shap-row {
     grid-template-columns: 120px minmax(80px, 1fr) 54px;
+  }
+}
+
+/* Calm guided-demo refinement */
+:root {
+  --page: #f5f7f6;
+  --surface-soft: #f7faf9;
+  --surface-muted: #edf3f1;
+  --border: #dce6e2;
+  --border-strong: #c7d6d0;
+  --text: #344841;
+  --text-strong: #172b24;
+  --muted: #667a72;
+  --muted-2: #82938c;
+  --primary: #437a68;
+  --primary-dark: #2f5f50;
+  --primary-soft: #e8f2ee;
+  --low: #4f9272;
+  --medium: #b58b40;
+  --high: #c46e45;
+  --severe: #b65350;
+}
+
+body {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(93, 145, 125, .09), transparent 30rem),
+    linear-gradient(180deg, #f8faf9 0, var(--page) 34rem);
+}
+
+.app-shell {
+  width: min(1240px, calc(100% - 48px));
+  gap: 30px;
+  padding: 42px 0 30px;
+}
+
+.panel {
+  border-radius: 20px;
+  box-shadow: 0 14px 40px rgba(35, 65, 54, .06);
+}
+
+.topbar {
+  padding: 0 4px 10px;
+}
+
+.brand-mark {
+  width: 52px;
+  height: 52px;
+  border-color: #b8d0c7;
+  border-radius: 15px;
+  background: var(--primary-soft);
+}
+
+.topbar h1 {
+  max-width: 900px;
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1.05;
+}
+
+.subtitle {
+  max-width: 820px;
+  margin-top: 12px;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.eyebrow,
+.section-kicker {
+  margin-bottom: 9px;
+  font-size: 11px;
+}
+
+.system-status {
+  padding: 12px 15px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.hero-explainer {
+  overflow: hidden;
+  padding: 34px;
+  background:
+    linear-gradient(120deg, rgba(232, 242, 238, .85), rgba(255, 255, 255, .94) 48%),
+    var(--surface);
+}
+
+.hero-flow {
+  grid-template-columns: minmax(340px, .9fr) minmax(520px, 1.1fr);
+  gap: 42px;
+}
+
+.hero-flow-copy h2 {
+  font-size: 30px;
+}
+
+.system-summary {
+  margin-top: 13px;
+  font-size: 16px;
+}
+
+.flow-steps {
+  gap: 8px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.flow-step {
+  min-height: 104px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .82);
+}
+
+.flow-step span {
+  font-size: 10px;
+}
+
+.flow-step strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.flow-step i {
+  right: -14px;
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+}
+
+.explanation-cards {
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 26px;
+}
+
+.explanation-cards article {
+  min-height: 140px;
+  padding: 21px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .72);
+}
+
+.explanation-cards strong {
+  font-size: 17px;
+}
+
+.explanation-cards p {
+  font-size: 14px;
+}
+
+.scenario-workbench {
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 24px 34px;
+  padding: 32px;
+}
+
+.scenario-intro {
+  padding-right: 30px;
+}
+
+.scenario-intro h2 {
+  font-size: 30px;
+}
+
+.scenario-intro > p:not(.step-label) {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.usage-guide {
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.usage-guide li {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.scenario-controls {
+  grid-template-columns: 1.1fr 1.45fr 1fr 1fr;
+  gap: 12px;
+}
+
+.corridor-control,
+.hour-control,
+.scenario-toggle {
+  min-height: 78px;
+  border-radius: 13px;
+  background: #fbfcfc;
+}
+
+.corridor-control {
+  padding: 11px 14px;
+}
+
+.corridor-control select {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.corridor-control small,
+.hour-label small,
+.toggle-copy small {
+  font-size: 10px;
+}
+
+.hour-control {
+  grid-template-columns: 1fr;
+  gap: 7px;
+  padding: 11px 14px;
+}
+
+.hour-label {
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.hour-label small {
+  max-width: none;
+}
+
+.hour-control output {
+  font-size: 11px;
+}
+
+.scenario-toggle {
+  padding: 10px 13px;
+}
+
+.toggle-copy {
+  flex: 1;
+}
+
+.toggle-copy strong {
+  font-size: 13px;
+}
+
+.primary-action,
+.refresh-button,
+.run-prediction-button {
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 11px;
+  font-size: 14px;
+}
+
+.primary-action {
+  box-shadow: 0 7px 18px rgba(47, 95, 80, .18);
+}
+
+.preset-row {
+  grid-template-columns: 125px 1fr;
+  padding-top: 18px;
+}
+
+.preset-row > span {
+  font-size: 10px;
+}
+
+.preset-row button {
+  min-height: 38px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.reasoning-panel {
+  padding: 34px;
+  border-color: #c9ddd5;
+}
+
+.reasoning-panel .panel-header h2 {
+  font-size: 30px;
+}
+
+.step-label {
+  font-size: 15px;
+}
+
+.prediction-headline {
+  gap: 16px;
+  margin: 22px 0 16px;
+}
+
+.prediction-headline > div,
+.prediction-headline::after {
+  min-height: 128px;
+  border-radius: 14px;
+}
+
+.prediction-headline strong {
+  max-width: 100%;
+  font-size: clamp(2.25rem, 5vw, 3rem);
+  overflow-wrap: break-word;
+}
+
+.prediction-headline > div {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.confidence-block strong {
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  line-height: 1.1;
+  overflow-wrap: break-word;
+}
+
+.confidence-status {
+  max-width: 18ch;
+  margin: 18px 0 0;
+  color: var(--text-strong);
+  font-size: clamp(.95rem, 1.6vw, 1.15rem);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+
+.factor-meta strong,
+.factor-meta span {
+  overflow-wrap: break-word;
+}
+
+.explanation-block,
+.counterfactual-block {
+  padding: 21px;
+  border-radius: 14px;
+}
+
+.explanation-block p,
+.counterfactual-block p {
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.shap-section {
+  margin: 34px 0;
+  padding-top: 28px;
+}
+
+.block-title-row .step-label {
+  color: var(--text-strong);
+  font-size: 24px;
+}
+
+.explanation-note {
+  font-size: 13px;
+}
+
+.shap-list {
+  gap: 8px;
+}
+
+.shap-row {
+  min-height: 64px;
+  grid-template-columns: 220px minmax(180px, 1fr) 78px;
+  padding: 12px 15px;
+  border-color: #edf2f0;
+  border-radius: 11px;
+}
+
+.factor-meta strong {
+  font-size: 14px;
+}
+
+.factor-meta span {
+  font-size: 10px;
+}
+
+.shap-row b {
+  font-size: 12px;
+}
+
+.secondary-heading {
+  order: 8;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 30px;
+  margin-top: 18px;
+  padding: 38px 4px 0;
+  border-top: 1px solid var(--border-strong);
+}
+
+.secondary-heading h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 30px;
+  letter-spacing: -.03em;
+}
+
+.secondary-heading p:last-child {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.secondary-heading > span {
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font: 500 10px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.corridor-section { order: 9; }
+.operations-grid { order: 10; }
+.model-info-panel { order: 11; }
+.app-footer { order: 12; }
+
+.analytics-panel,
+.map-panel,
+.feed-panel,
+.model-info-panel {
+  padding: 28px;
+}
+
+.analytics-heading h2,
+.map-panel .panel-header h2,
+.section-heading h2,
+.feed-panel .panel-header h2,
+.model-info-panel h2 {
+  font-size: 24px;
+}
+
+.summary-cards {
+  gap: 12px;
+}
+
+.summary-cards article {
+  min-height: 112px;
+  padding: 17px;
+  border-radius: 13px;
+}
+
+.summary-cards article > span {
+  font-size: 9px;
+}
+
+.summary-cards article > strong {
+  font-size: 20px;
+}
+
+.summary-cards article > small {
+  font-size: 11px;
+}
+
+.analytics-grid {
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.distribution-card,
+.ranking-card {
+  padding: 18px;
+  border-radius: 13px;
+}
+
+.visual-title strong {
+  font-size: 13px;
+}
+
+.visual-title span,
+.visual-title small,
+.rank-name,
+.ranking-list button > strong {
+  font-size: 10px;
+}
+
+.ranking-list button {
+  min-height: 34px;
+}
+
+.map-panel .city-map {
+  height: 440px;
+}
+
+.corridor-section {
+  padding-top: 0;
+}
+
+.corridor-grid {
+  gap: 14px;
+}
+
+.corridor-card {
+  min-height: 178px;
+  padding: 18px 18px 16px 21px;
+  border-radius: 14px;
+}
+
+.corridor-card h3 {
+  font-size: 16px;
+}
+
+.corridor-card > p {
+  font-size: 11px;
+}
+
+.feed-copy strong {
+  font-size: 13px;
+}
+
+.feed-copy p {
+  font-size: 11px;
+}
+
+.feed-copy time {
+  font-size: 9px;
+}
+
+.model-info-items article {
+  padding: 20px;
+  border-radius: 13px;
+}
+
+.model-info-items strong {
+  font-size: 16px;
+}
+
+.model-info-items p {
+  font-size: 13px;
+}
+
+.app-footer {
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1100px) {
+  .hero-flow,
+  .scenario-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .scenario-intro {
+    grid-row: auto;
+    padding: 0 0 22px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .scenario-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .preset-row {
+    grid-column: 1;
+  }
+
+  .prediction-headline {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .prediction-headline::after {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    width: min(100% - 22px, 1240px);
+    gap: 18px;
+    padding-top: 22px;
+  }
+
+  .topbar {
+    display: block;
+  }
+
+  .system-status {
+    margin: 16px 0 0 68px;
+  }
+
+  .hero-explainer,
+  .scenario-workbench,
+  .reasoning-panel,
+  .analytics-panel,
+  .map-panel,
+  .feed-panel,
+  .model-info-panel {
+    padding: 21px;
+  }
+
+  .topbar h1 {
+    font-size: 34px;
+  }
+
+  .subtitle {
+    font-size: 15px;
+  }
+
+  .hero-flow {
+    gap: 24px;
+  }
+
+  .hero-flow-copy h2,
+  .scenario-intro h2,
+  .reasoning-panel .panel-header h2,
+  .secondary-heading h2 {
+    font-size: 25px;
+  }
+
+  .flow-steps,
+  .explanation-cards,
+  .scenario-controls,
+  .prediction-headline,
+  .summary-cards,
+  .model-info-items {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-step {
+    min-height: 74px;
+  }
+
+  .scenario-actions,
+  .secondary-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .secondary-heading {
+    align-items: flex-start;
+  }
+
+  .shap-row {
+    grid-template-columns: 115px minmax(80px, 1fr) 54px;
+    padding-inline: 8px;
+  }
+
+  .factor-meta strong {
+    font-size: 11px;
+  }
+
+  .map-panel .city-map {
+    height: 360px;
   }
 }

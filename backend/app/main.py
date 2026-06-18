@@ -121,6 +121,21 @@ DISPLAY_NAMES = {
     "Stadium_Motera": "Stadium Motera",
 }
 
+FEATURE_LABELS = {
+    "current_speed": "Current Speed",
+    "freeflow_speed": "Free-flow Speed",
+    "is_rain": "Rain Condition",
+    "is_festival": "Festival/Event",
+    "hour_cos": "Time of Day Pattern",
+    "hour_sin": "Time of Day Pattern",
+    "corridor_id": "Corridor Pattern",
+    "weekday": "Day of Week",
+    "is_morning_rush": "Morning Rush",
+    "is_evening_rush": "Evening Rush",
+    "is_school_hour": "School Hour",
+    "hour": "Hour of Day",
+}
+
 
 # -----------------------------
 # Helpers
@@ -153,6 +168,144 @@ def make_json_safe(value):
     if pd.isna(value):
         return None
     return value
+
+
+def get_feature_label(feature_name: str) -> str:
+    return FEATURE_LABELS.get(
+        feature_name,
+        feature_name.replace("_", " ").title(),
+    )
+
+
+def join_reasons(reasons: list[str]) -> str:
+    if len(reasons) == 1:
+        return reasons[0]
+    if len(reasons) == 2:
+        return f"{reasons[0]} and {reasons[1]}"
+    return f"{', '.join(reasons[:-1])}, and {reasons[-1]}"
+
+
+def build_human_explanation(
+    severity: str,
+    sample_row: pd.DataFrame,
+    top_contributors: list[dict],
+) -> str:
+    negative_features = {
+        factor["feature"]
+        for factor in top_contributors
+        if factor["shap"] < 0
+    }
+    positive_features = {
+        factor["feature"]
+        for factor in top_contributors
+        if factor["shap"] > 0
+    }
+    reasons = []
+
+    if severity == "LOW" and negative_features:
+        if negative_features.intersection({"current_speed", "freeflow_speed"}):
+            reasons.append("the observed speed profile reduces congestion")
+
+        reducing_reasons = {
+            "is_rain": "the absence of rain reduces traffic pressure",
+            "is_festival": "no festival or event pressure is present",
+            "corridor_id": "this corridor pattern lowers predicted congestion",
+            "is_morning_rush": "morning rush-hour pressure is limited",
+            "is_evening_rush": "evening rush-hour pressure is limited",
+            "is_school_hour": "school-hour pressure is limited",
+            "hour_sin": "the time-of-day pattern reduces traffic pressure",
+            "hour_cos": "the time-of-day pattern reduces traffic pressure",
+            "weekday": "the day-of-week pattern reduces traffic pressure",
+            "hour": "the selected hour reduces traffic pressure",
+        }
+        for factor in top_contributors:
+            feature_name = factor["feature"]
+            if factor["shap"] >= 0 or feature_name in {
+                "current_speed",
+                "freeflow_speed",
+            }:
+                continue
+            reason = reducing_reasons.get(
+                feature_name,
+                f"{get_feature_label(feature_name).lower()} reduces predicted congestion",
+            )
+            if reason not in reasons:
+                reasons.append(reason)
+            if len(reasons) == 3:
+                break
+
+        return (
+            f"Low congestion is predicted because "
+            f"{join_reasons(reasons)}."
+        )
+
+    speed_is_influential = bool(
+        positive_features.intersection({"current_speed", "freeflow_speed"})
+    )
+    if speed_is_influential:
+        current_speed = float(sample_row["current_speed"].iloc[0])
+        freeflow_speed = float(sample_row["freeflow_speed"].iloc[0])
+        if current_speed < freeflow_speed * 0.75:
+            reasons.append(
+                "current speed is much lower than the free-flow speed"
+            )
+        elif current_speed < freeflow_speed:
+            reasons.append("current speed is below the free-flow speed")
+        else:
+            reasons.append("the current speed pattern is influencing traffic")
+
+    factor_reasons = {
+        "is_rain": "rain is active",
+        "is_festival": "a festival or event is active",
+        "corridor_id": (
+            "this corridor pattern contributes to higher congestion"
+        ),
+        "is_morning_rush": "morning rush-hour pressure is active",
+        "is_evening_rush": "evening rush-hour pressure is active",
+        "is_school_hour": "school-hour traffic is active",
+        "hour_sin": "the time-of-day pattern increases traffic pressure",
+        "hour_cos": "the time-of-day pattern increases traffic pressure",
+        "weekday": "the day-of-week pattern increases traffic pressure",
+        "hour": "the selected hour increases traffic pressure",
+    }
+    for factor in top_contributors:
+        feature_name = factor["feature"]
+        if factor["shap"] <= 0 or feature_name in {
+            "current_speed",
+            "freeflow_speed",
+        }:
+            continue
+        reason = factor_reasons.get(
+            feature_name,
+            f"{get_feature_label(feature_name).lower()} contributes to higher congestion",
+        )
+        if reason not in reasons:
+            reasons.append(reason)
+        if len(reasons) == 3:
+            break
+
+    severity_text = severity.title()
+    if reasons:
+        return (
+            f"{severity_text} congestion is predicted because "
+            f"{join_reasons(reasons)}."
+        )
+
+    reducing_factors = [
+        get_feature_label(factor["feature"]).lower()
+        for factor in top_contributors
+        if factor["shap"] < 0
+    ][:3]
+    if reducing_factors:
+        return (
+            f"{severity_text} congestion is predicted. "
+            f"The strongest reducing influences are "
+            f"{join_reasons(reducing_factors)}."
+        )
+    return (
+        f"{severity_text} congestion is predicted, with no single feature "
+        "dominating this result."
+    )
 
 
 def apply_scenario(
@@ -197,12 +350,13 @@ def build_trace(sample_row: pd.DataFrame) -> dict:
     ):
         contributions.append({
             "feature": feature_name,
+            "display_name": get_feature_label(feature_name),
             "value": make_json_safe(raw_value),
             "shap": round(float(shap_value), 4),
             "impact": (
-                "increases congestion"
+                "Increased predicted congestion"
                 if shap_value > 0
-                else "decreases congestion"
+                else "Reduced predicted congestion"
             ),
         })
 
@@ -212,23 +366,11 @@ def build_trace(sample_row: pd.DataFrame) -> dict:
         reverse=True,
     )
     top_contributors = contributions_sorted[:5]
-    positive_factors = [
-        factor for factor in top_contributors if factor["shap"] > 0
-    ]
-
-    if positive_factors:
-        reason_text = ", ".join(
-            f"{factor['feature']}={factor['value']}"
-            for factor in positive_factors[:3]
-        )
-        explanation = (
-            f"{severity} congestion predicted mainly because of {reason_text}."
-        )
-    else:
-        explanation = (
-            f"{severity} congestion predicted. "
-            "No strong positive congestion factors found."
-        )
+    explanation = build_human_explanation(
+        severity,
+        sample_row,
+        top_contributors,
+    )
 
     trace_id = str(uuid.uuid4())
     trace = {
