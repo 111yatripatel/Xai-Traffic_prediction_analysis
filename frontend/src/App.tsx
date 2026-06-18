@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 const API_BASE = "http://127.0.0.1:8000";
+const THEME_STORAGE_KEY = "xai-traffic-theme";
 
 type Severity = "LOW" | "MEDIUM" | "HIGH" | "SEVERE";
+type Theme = "dark" | "light";
 
 type ShapFactor = {
   feature: string;
@@ -215,6 +217,14 @@ function formatHourContext(hour: number) {
   return `${String(hour).padStart(2, "0")}:00 Evening`;
 }
 
+function getInitialTheme(): Theme {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
 async function getJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, options);
   if (!response.ok) {
@@ -262,6 +272,7 @@ function Skeleton({ className = "" }: { className?: string }) {
 }
 
 function App() {
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [hour, setHour] = useState(8);
   const [isRain, setIsRain] = useState(true);
   const [isFestival, setIsFestival] = useState(false);
@@ -344,6 +355,15 @@ function App() {
     }
     setFeedsLoading(false);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // The selected theme still applies when browser storage is unavailable.
+    }
+  }, [theme]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
@@ -478,20 +498,39 @@ function App() {
   );
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${theme}-theme`} data-theme={theme}>
       <header className="topbar">
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>
           <div>
             <p className="eyebrow">Ahmedabad XAI Traffic Intelligence</p>
             <h1>Explainable Traffic Congestion Prediction</h1>
-            <p className="subtitle">Simulate a traffic scenario, predict congestion using XGBoost, and understand the prediction using SHAP explanations.</p>
+            <p className="subtitle">Simulate traffic scenarios, predict congestion using XGBoost, and understand every result through SHAP reasoning.</p>
           </div>
         </div>
-        <div className="system-status">
-          <span className="status-dot" />
-          <span>{apiOnline ? "Backend connected" : "Connecting"}</span>
-          <small>XGBoost · SHAP</small>
+        <div className="header-actions">
+          <div className="system-status">
+            <span className="status-dot" />
+            <span>{apiOnline ? "Backend connected" : "Connecting"}</span>
+            <small>XGBoost · SHAP</small>
+          </div>
+          <button
+            className="theme-toggle"
+            type="button"
+            onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            aria-pressed={theme === "light"}
+          >
+            <span className="theme-toggle-icon" aria-hidden="true">
+              {theme === "dark" ? (
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+              ) : (
+                <svg viewBox="0 0 24 24"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z" /></svg>
+              )}
+            </span>
+            <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+            <i aria-hidden="true"><span /></i>
+          </button>
         </div>
       </header>
 
@@ -507,7 +546,7 @@ function App() {
           <div className="flow-steps" aria-label="Explainable prediction workflow">
             {[
               "Traffic Scenario",
-              "XGBoost Prediction",
+              "XGBoost Model",
               "SHAP Explanation",
               "Decision Insight",
             ].map((step, index) => (
