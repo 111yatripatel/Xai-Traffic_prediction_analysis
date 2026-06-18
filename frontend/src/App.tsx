@@ -136,55 +136,46 @@ const DISPLAY_NAMES: Record<string, string> = {
   CG_Road: "CG Road",
   Ashram_Road: "Ashram Road",
   Sardar_Patel_Ring: "Sardar Patel Ring Road",
-  Narol_Naroda: "Narol–Naroda",
+  Narol_Naroda: "Narol-Naroda",
   Maninagar: "Maninagar",
   Stadium_Motera: "Stadium Motera",
 };
 
 const MAP_ROADS = [
-  { id: "Sardar_Patel_Ring", path: "M 74 161 C 84 61, 186 23, 322 50 C 448 73, 512 164, 478 262 C 441 361, 294 390, 160 346 C 78 319, 39 247, 74 161 Z", label: [393, 70] },
-  { id: "SG_Highway", path: "M 119 317 C 165 274, 183 216, 207 153 C 224 108, 254 75, 291 48", label: [115, 286] },
-  { id: "Ring_Road_132ft", path: "M 121 250 C 179 213, 245 199, 316 208 C 378 216, 423 249, 461 301", label: [337, 237] },
-  { id: "Ashram_Road", path: "M 263 97 C 252 145, 258 196, 245 239 C 232 279, 213 311, 202 348", label: [191, 173] },
-  { id: "CG_Road", path: "M 232 174 C 270 165, 299 169, 328 191", label: [278, 153] },
-  { id: "Narol_Naroda", path: "M 116 327 C 190 310, 259 294, 329 261 C 373 240, 405 204, 447 175", label: [354, 283] },
-  { id: "Maninagar", path: "M 287 248 C 313 268, 332 296, 344 331", label: [321, 337] },
-  { id: "Stadium_Motera", path: "M 226 87 C 242 103, 262 112, 285 115", label: [310, 109] },
+  { id: "Sardar_Patel_Ring", path: "M 76 163 C 93 74, 175 35, 286 39 C 404 43, 482 104, 493 198 C 505 291, 429 356, 316 370 C 205 384, 103 340, 69 260 C 51 218, 57 188, 76 163 Z", label: [391, 64] },
+  { id: "SG_Highway", path: "M 126 334 C 117 282, 119 229, 127 178 C 134 130, 145 88, 161 51", label: [122, 242] },
+  { id: "Ring_Road_132ft", path: "M 151 244 C 181 207, 228 188, 281 193 C 332 197, 372 223, 392 263 C 374 285, 350 300, 319 307", label: [344, 238] },
+  { id: "Ashram_Road", path: "M 244 101 C 238 139, 237 181, 240 220 C 242 256, 239 292, 230 327", label: [236, 182] },
+  { id: "CG_Road", path: "M 177 170 C 196 161, 218 157, 239 159", label: [191, 151] },
+  { id: "Narol_Naroda", path: "M 361 344 C 378 300, 389 259, 400 218 C 414 168, 430 123, 456 79", label: [401, 205] },
+  { id: "Maninagar", path: "M 294 263 C 316 277, 333 298, 344 324", label: [329, 306] },
+  { id: "Stadium_Motera", path: "M 198 77 C 215 72, 231 72, 247 79", label: [211, 66] },
 ] as const;
 
 const DEMO_PRESETS: DemoPreset[] = [
-  {
-    label: "Morning Rain on SG Highway",
-    corridorName: "SG_Highway",
-    hour: 8,
-    isRain: true,
-    isFestival: false,
-  },
-  {
-    label: "Festival Evening at Stadium Motera",
-    corridorName: "Stadium_Motera",
-    hour: 19,
-    isRain: false,
-    isFestival: true,
-  },
-  {
-    label: "Normal Afternoon on CG Road",
-    corridorName: "CG_Road",
-    hour: 14,
-    isRain: false,
-    isFestival: false,
-  },
-  {
-    label: "Rush Hour on Ashram Road",
-    corridorName: "Ashram_Road",
-    hour: 18,
-    isRain: false,
-    isFestival: false,
-  },
+  { label: "Morning Rain on SG Highway", corridorName: "SG_Highway", hour: 8, isRain: true, isFestival: false },
+  { label: "Festival Evening near Stadium Motera", corridorName: "Stadium_Motera", hour: 19, isRain: false, isFestival: true },
+  { label: "Normal Afternoon on CG Road", corridorName: "CG_Road", hour: 14, isRain: false, isFestival: false },
+  { label: "Evening Rush on Ashram Road", corridorName: "Ashram_Road", hour: 18, isRain: false, isFestival: false },
 ];
 
+const FEATURE_LABELS: Record<string, string> = {
+  current_speed: "Current Speed",
+  freeflow_speed: "Free-flow Speed",
+  is_morning_rush: "Morning Rush",
+  is_evening_rush: "Evening Rush",
+  is_school_hour: "School Hours",
+  is_rain: "Rain Detected",
+  is_festival: "Festival/Event",
+  hour: "Hour of Day",
+  corridor_id: "Corridor Pattern",
+  hour_sin: "Time Cycle (Sine)",
+  hour_cos: "Time Cycle (Cosine)",
+};
+
 function formatFeatureName(feature: string) {
-  return feature.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return FEATURE_LABELS[feature]
+    ?? feature.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatTime(value?: string) {
@@ -197,6 +188,15 @@ function formatTime(value?: string) {
     day: "2-digit",
     month: "short",
   }).format(date);
+}
+
+function formatHourContext(hour: number) {
+  if (hour >= 7 && hour <= 10) return `${String(hour).padStart(2, "0")}:00 Morning Rush`;
+  if (hour >= 17 && hour <= 20) return `${String(hour).padStart(2, "0")}:00 Evening Rush`;
+  if (hour < 6) return `${String(hour).padStart(2, "0")}:00 Overnight`;
+  if (hour < 12) return `${String(hour).padStart(2, "0")}:00 Morning`;
+  if (hour < 17) return `${String(hour).padStart(2, "0")}:00 Afternoon`;
+  return `${String(hour).padStart(2, "0")}:00 Evening`;
 }
 
 async function getJson<T>(path: string, options?: RequestInit): Promise<T> {
@@ -222,17 +222,19 @@ function Toggle({
   checked,
   onChange,
   label,
+  helper,
   icon,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
+  helper: string;
   icon: "rain" | "event";
 }) {
   return (
     <label className={`scenario-toggle ${checked ? "is-on" : ""}`}>
       <span className="control-icon"><StatusIcon type={icon} /></span>
-      <span>{label}</span>
+      <span className="toggle-copy"><strong>{label}</strong><small>{helper}</small></span>
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
       <span className="toggle-track" aria-hidden="true"><span /></span>
     </label>
@@ -256,7 +258,6 @@ function App() {
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [feedsLoading, setFeedsLoading] = useState(true);
-  const [modelInfoLoading, setModelInfoLoading] = useState(true);
   const [apiOnline, setApiOnline] = useState(false);
   const [error, setError] = useState("");
 
@@ -304,7 +305,6 @@ function App() {
 
   const loadFeeds = useCallback(async () => {
     setFeedsLoading(true);
-    setModelInfoLoading(true);
     const [anomalyResult, traceResult, modelResult] = await Promise.allSettled([
       getJson<AnomaliesResponse>("/api/v1/anomalies"),
       getJson<TraceListResponse>("/api/v1/traces?limit=10"),
@@ -320,7 +320,6 @@ function App() {
     if (modelResult.status === "fulfilled") {
       setModelInfo(modelResult.value);
     }
-
     if (
       anomalyResult.status === "rejected"
       && traceResult.status === "rejected"
@@ -328,7 +327,6 @@ function App() {
       setError("Some operational feeds could not be loaded.");
     }
     setFeedsLoading(false);
-    setModelInfoLoading(false);
   }, []);
 
   useEffect(() => {
@@ -343,7 +341,11 @@ function App() {
 
   async function selectCorridor(
     corridorName: string,
-    scenario?: Pick<DemoPreset, "hour" | "isRain" | "isFestival">,
+    scenario?: {
+      hour: number;
+      isRain: boolean;
+      isFestival: boolean;
+    },
   ) {
     const selectedHour = scenario?.hour ?? hour;
     const selectedRain = scenario?.isRain ?? isRain;
@@ -420,6 +422,29 @@ function App() {
   const networkAverage = dashboard?.corridors.length
     ? dashboard.corridors.reduce((sum, item) => sum + item.congestion_pct, 0) / dashboard.corridors.length
     : 0;
+  const severityCounts = useMemo(
+    () => (["LOW", "MEDIUM", "HIGH", "SEVERE"] as Severity[]).reduce(
+      (counts, severity) => ({
+        ...counts,
+        [severity]: dashboard?.corridors.filter((item) => item.severity === severity).length ?? 0,
+      }),
+      { LOW: 0, MEDIUM: 0, HIGH: 0, SEVERE: 0 } as Record<Severity, number>,
+    ),
+    [dashboard],
+  );
+  const corridorRanking = useMemo(
+    () => [...(dashboard?.corridors ?? [])].sort(
+      (left, right) => right.congestion_pct - left.congestion_pct,
+    ),
+    [dashboard],
+  );
+  const highestCorridor = corridorRanking[0];
+  const displayedAverage = dashboard?.summary?.average_congestion ?? networkAverage;
+  const displayedScenario = dashboard?.scenario ?? {
+    hour,
+    is_rain: isRain,
+    is_festival: isFestival,
+  };
 
   return (
     <main className="app-shell">
@@ -427,55 +452,57 @@ function App() {
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>
           <div>
-            <p className="eyebrow">Ahmedabad traffic command / XAI-01</p>
-            <h1>Ahmedabad XAI Traffic Intelligence</h1>
-            <p className="subtitle">Predict traffic congestion and understand every prediction using SHAP-based reasoning traces.</p>
+            <p className="eyebrow">Ahmedabad XAI Traffic Intelligence</p>
+            <h1>Explainable Traffic Congestion Prediction</h1>
+            <p className="subtitle">Simulate a traffic scenario, predict congestion using XGBoost, and understand the prediction using SHAP explanations.</p>
           </div>
         </div>
         <div className="system-status">
           <span className="status-dot" />
-          <span>{apiOnline ? "Model online" : "Connecting"}</span>
-          <small>{modelInfo ? `${modelInfo.model_type} · SHAP` : "API · 127.0.0.1:8000"}</small>
+          <span>{apiOnline ? "Backend connected" : "Connecting"}</span>
+          <small>XGBoost · SHAP</small>
         </div>
       </header>
 
       <section className="hero-explainer panel" aria-labelledby="how-it-works-title">
         <div className="hero-flow">
           <div className="hero-flow-copy">
-            <p className="section-kicker">How the system works</p>
-            <h2 id="how-it-works-title">From traffic context to an explainable decision</h2>
+            <p className="section-kicker">What this system does</p>
+            <h2 id="how-it-works-title">A guided explainable-AI traffic demo</h2>
+            <p className="system-summary">
+              This prototype predicts congestion for Ahmedabad road corridors using scenario inputs such as corridor, time, rain, and event condition. The backend ML model predicts congestion percentage, and SHAP explains which factors influenced the prediction.
+            </p>
           </div>
-          <div className="flow-steps five-step-flow" aria-label="Explainable prediction workflow">
+          <div className="flow-steps" aria-label="Explainable prediction workflow">
             {[
-              "Select Scenario",
-              "FastAPI Request",
+              "Traffic Scenario",
               "XGBoost Prediction",
               "SHAP Explanation",
-              "Saved Audit Trace",
+              "Decision Insight",
             ].map((step, index) => (
               <div className="flow-step" key={step}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <strong>{step}</strong>
-                {index < 4 && <i aria-hidden="true">→</i>}
+                {index < 3 && <i aria-hidden="true">→</i>}
               </div>
             ))}
           </div>
         </div>
         <div className="explanation-cards">
           <article>
-            <span>01 / Input scenario</span>
-            <strong>Describe the traffic context</strong>
-            <p>Choose a corridor, hour, rain condition, and event activity before running the model.</p>
+            <span>Input Scenario</span>
+            <strong>Describe the traffic situation</strong>
+            <p>Choose the corridor, hour, rain, and event context that the model should evaluate.</p>
           </article>
           <article>
-            <span>02 / Prediction</span>
-            <strong>Estimate congestion severity</strong>
-            <p>XGBoost returns a congestion percentage and classifies it from LOW through SEVERE.</p>
+            <span>Prediction</span>
+            <strong>XGBoost estimates congestion</strong>
+            <p>A machine learning model used to estimate congestion percentage and severity.</p>
           </article>
           <article>
-            <span>03 / Reasoning trace</span>
-            <strong>Understand why it happened</strong>
-            <p>SHAP shows which traffic features pushed the result upward or helped reduce congestion.</p>
+            <span>Reasoning Trace</span>
+            <strong>SHAP explains the result</strong>
+            <p>A saved explanation of one prediction for audit and review.</p>
           </article>
         </div>
       </section>
@@ -489,9 +516,14 @@ function App() {
 
       <section className="scenario-workbench panel" aria-label="Scenario controls">
         <div className="scenario-intro">
-          <p className="section-kicker">Step 01 / Configure input</p>
-          <h2>Build a traffic scenario</h2>
-          <p>Select a corridor and operating conditions, then run one focused prediction or refresh the full network.</p>
+          <p className="step-label">Step 1</p>
+          <h2>Build Scenario</h2>
+          <p>Choose a corridor and conditions to simulate a traffic situation.</p>
+          <ol className="usage-guide">
+            <li><span>1</span>Select corridor and scenario conditions</li>
+            <li><span>2</span>Run prediction</li>
+            <li><span>3</span>Read the SHAP reasoning trace</li>
+          </ol>
         </div>
         <div className="scenario-controls">
           <label className="corridor-control">
@@ -501,14 +533,15 @@ function App() {
                 <option key={road.id} value={road.id}>{DISPLAY_NAMES[road.id]}</option>
               ))}
             </select>
+            <small>Road segment to simulate</small>
           </label>
           <label className="hour-control">
-            <span className="hour-label">Hour</span>
+            <span className="hour-label"><strong>Hour</strong><small>Time of day affects rush-hour traffic</small></span>
             <input type="range" min="0" max="23" value={hour} onChange={(event) => setHour(Number(event.target.value))} />
-            <output>{String(hour).padStart(2, "0")}:00</output>
+            <output>{formatHourContext(hour)}</output>
           </label>
-          <Toggle checked={isRain} onChange={setIsRain} label="Rain" icon="rain" />
-          <Toggle checked={isFestival} onChange={setIsFestival} label="Festival / event" icon="event" />
+          <Toggle checked={isRain} onChange={setIsRain} label="Rain" helper="Weather may increase congestion" icon="rain" />
+          <Toggle checked={isFestival} onChange={setIsFestival} label="Festival / event" helper="Events affect corridor pressure" icon="event" />
         </div>
         <div className="scenario-actions">
           <button className="primary-action" onClick={() => void selectCorridor(activeCorridor)} disabled={detailLoading}>
@@ -525,14 +558,10 @@ function App() {
           </div>
         </div>
         <div className="preset-row">
-          <span>Demo scenarios</span>
+          <span>Try a demo scenario</span>
           <div>
             {DEMO_PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                onClick={() => runPreset(preset)}
-                disabled={detailLoading}
-              >
+              <button key={preset.label} onClick={() => runPreset(preset)} disabled={detailLoading}>
                 {preset.label}
               </button>
             ))}
@@ -540,12 +569,109 @@ function App() {
         </div>
       </section>
 
+      <section className="analytics-panel panel" aria-labelledby="analytics-title">
+        <div className="analytics-heading">
+          <div>
+            <p className="section-kicker">Dashboard analytics</p>
+            <h2 id="analytics-title">Network summary</h2>
+          </div>
+          <span>{dashboardLoading ? "Loading dashboard predictions..." : `Updated ${formatTime(dashboard?.generated_at)}`}</span>
+        </div>
+
+        {dashboardLoading && !dashboard ? (
+          <div className="analytics-loading">
+            <div className="loading-copy">
+              <span className="loading-spinner" />
+              <div><strong>Loading dashboard predictions...</strong><small>Running the model across all eight corridors.</small></div>
+            </div>
+            <Skeleton className="analytics-skeleton" />
+          </div>
+        ) : dashboard ? (
+          <>
+            <div className="summary-cards">
+              <article>
+                <span>Average congestion</span>
+                <strong>{displayedAverage.toFixed(1)}%</strong>
+                <small>Across {dashboard.count} corridors</small>
+              </article>
+              <article>
+                <span>Highest congestion</span>
+                <strong>{highestCorridor?.display_name ?? "—"}</strong>
+                <small>{highestCorridor ? `${highestCorridor.congestion_pct.toFixed(1)}% · ${highestCorridor.severity}` : "No data"}</small>
+              </article>
+              <article className="severity-summary-card">
+                <span>Corridor severity</span>
+                <div className="severity-counts">
+                  {(["LOW", "MEDIUM", "HIGH", "SEVERE"] as Severity[]).map((severity) => (
+                    <em className={severity.toLowerCase()} key={severity}>
+                      <b>{severityCounts[severity]}</b>{severity}
+                    </em>
+                  ))}
+                </div>
+              </article>
+              <article>
+                <span>Current scenario</span>
+                <strong>{formatHourContext(displayedScenario.hour)}</strong>
+                <small>
+                  {displayedScenario.is_rain ? "Rain on" : "No rain"} · {displayedScenario.is_festival ? "Event active" : "No event"}
+                </small>
+              </article>
+            </div>
+
+            <div className="analytics-grid">
+              <article className="distribution-card">
+                <div className="visual-title">
+                  <div><strong>Severity distribution</strong><span>How the network is classified</span></div>
+                  <small>{dashboard.count} total</small>
+                </div>
+                <div className="distribution-bar" aria-label="Corridor severity distribution">
+                  {(["LOW", "MEDIUM", "HIGH", "SEVERE"] as Severity[]).map((severity) => (
+                    severityCounts[severity] > 0 && (
+                      <span
+                        className={severity.toLowerCase()}
+                        key={severity}
+                        style={{ width: `${(severityCounts[severity] / Math.max(dashboard.count, 1)) * 100}%` }}
+                        title={`${severity}: ${severityCounts[severity]}`}
+                      />
+                    )
+                  ))}
+                </div>
+                <div className="distribution-legend">
+                  {(["LOW", "MEDIUM", "HIGH", "SEVERE"] as Severity[]).map((severity) => (
+                    <span key={severity}><i className={severity.toLowerCase()} />{severity} <b>{severityCounts[severity]}</b></span>
+                  ))}
+                </div>
+              </article>
+
+              <article className="ranking-card">
+                <div className="visual-title">
+                  <div><strong>Corridor ranking</strong><span>Highest predicted congestion first</span></div>
+                </div>
+                <div className="ranking-list">
+                  {corridorRanking.map((corridor, index) => (
+                    <button key={corridor.corridor_name} onClick={() => void selectCorridor(corridor.corridor_name)}>
+                      <span className="rank-number">{index + 1}</span>
+                      <span className="rank-name">{corridor.display_name}</span>
+                      <span className="rank-track"><i className={corridor.severity.toLowerCase()} style={{ width: `${corridor.congestion_pct}%` }} /></span>
+                      <strong>{corridor.congestion_pct.toFixed(1)}%</strong>
+                    </button>
+                  ))}
+                </div>
+              </article>
+            </div>
+          </>
+        ) : (
+          <div className="analytics-empty">Dashboard predictions are unavailable.</div>
+        )}
+      </section>
+
       <section className="primary-grid">
         <article className="panel map-panel">
           <div className="panel-header">
             <div>
-              <p className="section-kicker">Network overview</p>
-              <h2>Ahmedabad corridor state</h2>
+              <p className="section-kicker">Ahmedabad overview</p>
+              <h2>Corridor map</h2>
+              <p className="map-note">Abstract corridor map — not to scale.</p>
             </div>
             <div className="map-legend">
               {(["LOW", "MEDIUM", "HIGH", "SEVERE"] as Severity[]).map((severity) => (
@@ -556,27 +682,24 @@ function App() {
 
           <div className={`city-map ${dashboardLoading ? "is-loading" : ""}`}>
             <div className="map-meta">
-              <span>AMD / 23.02°N</span>
-              <span>72.57°E</span>
+              <span>West Ahmedabad</span>
+              <span>East Ahmedabad</span>
             </div>
             <svg viewBox="0 0 540 400" role="img" aria-label="Abstract map of Ahmedabad traffic corridors">
               <defs>
                 <pattern id="minorGrid" width="20" height="20" patternUnits="userSpaceOnUse">
                   <path d="M 20 0 L 0 0 0 20" fill="none" stroke="currentColor" strokeWidth=".5" />
                 </pattern>
-                <filter id="roadGlow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="3" result="blur" />
-                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                </filter>
               </defs>
               <rect width="540" height="400" className="map-grid" fill="url(#minorGrid)" />
-              <path className="river" d="M247 -10 C221 55 244 89 231 139 C215 198 238 238 218 290 C201 335 191 374 201 410" />
+              <path className="river" d="M272 -12 C 258 35, 275 72, 263 112 C 251 153, 268 190, 257 231 C 246 273, 260 313, 249 352 C 244 371, 245 390, 251 412" />
+              <text className="river-label" x="277" y="131" transform="rotate(88 277 131)">Sabarmati River</text>
               <g className="minor-roads">
-                <path d="M38 103 C143 130 199 104 260 132 C322 161 400 151 515 112" />
-                <path d="M31 221 C111 199 159 168 221 170 C306 173 400 151 514 203" />
-                <path d="M54 281 C141 253 206 253 276 278 C353 306 421 333 508 314" />
-                <path d="M156 32 C153 107 133 182 143 245 C150 303 176 352 208 394" />
-                <path d="M363 20 C333 86 350 134 380 187 C411 243 417 310 398 386" />
+                <path d="M45 112 C 114 123, 174 112, 233 126 C 315 146, 390 138, 499 111" />
+                <path d="M42 209 C 116 194, 181 181, 238 185 C 315 190, 389 182, 500 202" />
+                <path d="M55 287 C 131 264, 199 258, 259 273 C 337 292, 407 317, 488 308" />
+                <path d="M187 38 C 180 104, 178 165, 184 226 C 189 286, 204 340, 220 386" />
+                <path d="M351 31 C 338 89, 344 140, 359 188 C 378 248, 380 314, 369 375" />
               </g>
               <g className="corridor-roads">
                 {MAP_ROADS.map((road) => {
@@ -586,7 +709,13 @@ function App() {
                   return (
                     <g
                       key={road.id}
-                      className={`map-corridor ${severity.toLowerCase()} ${isActive ? "active" : ""}`}
+                      className={[
+                        "map-corridor",
+                        severity.toLowerCase(),
+                        isActive ? "active" : "",
+                        road.id === "Sardar_Patel_Ring" ? "outer-ring" : "",
+                        road.id === "Ring_Road_132ft" ? "inner-ring" : "",
+                      ].filter(Boolean).join(" ")}
                       onClick={() => void selectCorridor(road.id)}
                       role="button"
                       tabIndex={0}
@@ -597,7 +726,7 @@ function App() {
                     >
                       <path className="road-hitbox" d={road.path} />
                       <path className="road-base" d={road.path} />
-                      <path className="road-status" d={road.path} filter={isActive ? "url(#roadGlow)" : undefined} />
+                      <path className="road-status" d={road.path} />
                       <circle cx={road.label[0]} cy={road.label[1]} r={isActive ? 5 : 3.5} />
                       <text x={road.label[0] + 9} y={road.label[1] + 4}>{DISPLAY_NAMES[road.id]}</text>
                     </g>
@@ -618,8 +747,9 @@ function App() {
         <article className="panel reasoning-panel">
           <div className="panel-header">
             <div>
-              <p className="section-kicker">Active reasoning trace</p>
-              <h2>{reasoning ? DISPLAY_NAMES[reasoning.corridorName] ?? reasoning.corridorName : "Select a corridor"}</h2>
+              <p className="step-label">Step 2</p>
+              <h2>View Prediction</h2>
+              <p className="result-corridor">{reasoning ? DISPLAY_NAMES[reasoning.corridorName] ?? reasoning.corridorName : "Run a traffic scenario"}</p>
             </div>
             <div className="reasoning-actions">
               {reasoning && <span className={`severity-badge ${reasoning.severity.toLowerCase()}`}>{reasoning.severity}</span>}
@@ -635,6 +765,10 @@ function App() {
 
           {detailLoading ? (
             <div className="reasoning-loading">
+              <div className="loading-copy">
+                <span className="loading-spinner" />
+                <div><strong>Generating reasoning trace...</strong><small>Calculating prediction and SHAP contributions.</small></div>
+              </div>
               <Skeleton className="metric-skeleton" />
               <Skeleton />
               <Skeleton />
@@ -661,11 +795,11 @@ function App() {
 
               <div className="shap-section">
                 <div className="block-title-row">
-                  <span className="block-label">SHAP contribution profile</span>
-                  <small>← reduces / increases →</small>
+                  <span className="step-label">Step 3 · Understand Why</span>
+                  <small>Feature contribution</small>
                 </div>
                 <p className="explanation-note">
-                  Positive SHAP values push congestion higher. Negative SHAP values reduce predicted congestion.
+                  Positive = increases congestion. Negative = decreases congestion.
                 </p>
                 <div className="shap-axis"><i /><span /></div>
                 <div className="shap-list">
@@ -676,7 +810,7 @@ function App() {
                       <div className="shap-row" key={`${factor.feature}-${index}`}>
                         <div className="factor-meta">
                           <strong>{formatFeatureName(factor.feature)}</strong>
-                          <span>Value {String(factor.value)}</span>
+                          <span>Value: {String(factor.value)} · {factor.shap >= 0 ? "Increased congestion" : "Reduced congestion"}</span>
                         </div>
                         <div className="shap-visual">
                           <span className="axis-center" />
@@ -698,7 +832,7 @@ function App() {
               </div>
 
               <div className="counterfactual-block">
-                <span className="block-label">Counterfactual guidance</span>
+                <span className="block-label">What Could Reduce Congestion?</span>
                 <small>Counterfactual explains what would need to change to reduce congestion.</small>
                 <p>{reasoning.counterfactual}</p>
               </div>
@@ -709,7 +843,10 @@ function App() {
               </footer>
             </>
           ) : (
-            <div className="empty-state">Select any road on the network map to generate its reasoning trace.</div>
+            <div className="empty-state">
+              <strong>No prediction yet</strong>
+              <span>Choose a corridor and conditions above, then select Run Prediction.</span>
+            </div>
           )}
         </article>
       </section>
@@ -717,8 +854,8 @@ function App() {
       <section className="corridor-section">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">Live model output</p>
-            <h2>All monitored corridors</h2>
+            <p className="section-kicker">Live corridor overview</p>
+            <h2>All eight corridors</h2>
           </div>
           <span>Updated {formatTime(dashboard?.generated_at)}</span>
         </div>
@@ -742,15 +879,6 @@ function App() {
                     <strong>{corridor.congestion_pct.toFixed(1)}<small>%</small></strong>
                   </div>
                   <p>{corridor.explanation}</p>
-                  <div className="mini-factors">
-                    {corridor.top_factors.slice(0, 2).map((factor) => (
-                      <span key={factor.feature}>
-                        <i className={factor.shap >= 0 ? "up" : "down"} />
-                        {formatFeatureName(factor.feature)}
-                        <b>{factor.shap >= 0 ? "+" : ""}{factor.shap.toFixed(2)}</b>
-                      </span>
-                    ))}
-                  </div>
                 </button>
               ))}
         </div>
@@ -760,8 +888,8 @@ function App() {
         <article className="panel feed-panel anomaly-panel">
           <div className="panel-header">
             <div>
-              <p className="section-kicker">Operational awareness</p>
-              <h2>Anomaly alert feed</h2>
+              <p className="section-kicker">Secondary information</p>
+              <h2>Traffic Alerts</h2>
             </div>
             <span className="panel-icon alert"><StatusIcon type="alert" /></span>
           </div>
@@ -789,8 +917,8 @@ function App() {
         <article className="panel feed-panel history-panel">
           <div className="panel-header">
             <div>
-              <p className="section-kicker">Reasoning archive</p>
-              <h2>Recent trace history</h2>
+              <p className="section-kicker">Saved audit history</p>
+              <h2>Recent Saved Explanations</h2>
             </div>
             <span className="panel-icon"><StatusIcon type="history" /></span>
           </div>
@@ -798,7 +926,7 @@ function App() {
             {feedsLoading
               ? Array.from({ length: 4 }, (_, index) => <Skeleton className="feed-skeleton" key={index} />)
               : traces.length === 0
-                ? <div className="feed-empty"><strong>No reasoning traces yet</strong><span>Run a corridor prediction to create the first trace.</span></div>
+                ? <div className="feed-empty"><strong>No recent traces yet.</strong><span>Run a prediction to create one.</span></div>
                 : traces.map((trace) => (
                   <button className="trace-item" key={trace.trace_id} onClick={() => void selectTrace(trace.trace_id)}>
                     <span className={`trace-node ${trace.label.toLowerCase()}`} />
@@ -821,41 +949,34 @@ function App() {
       </section>
 
       <section className="model-info-panel panel">
-        <div className="model-info-heading">
-          <div>
-            <p className="section-kicker">Model transparency</p>
-            <h2>What powers this prototype</h2>
-            <p>The model metadata below is loaded directly from the backend.</p>
-          </div>
-          <span className="api-source">GET /api/v1/model-info</span>
+        <div>
+          <p className="section-kicker">Model Info</p>
+          <h2>Technology behind the prediction</h2>
         </div>
-        {modelInfoLoading ? (
-          <div className="model-info-loading">
-            <Skeleton className="large" />
-            <Skeleton className="large" />
-            <Skeleton className="large" />
-          </div>
-        ) : modelInfo ? (
-          <div className="model-info-grid">
-            <article><span>Prediction model</span><strong>{modelInfo.model_type}</strong></article>
-            <article><span>Explainability method</span><strong>{modelInfo.xai_method}</strong></article>
-            <article><span>Prediction target</span><strong>{formatFeatureName(modelInfo.target)}</strong></article>
-            <article className="feature-inventory">
-              <span>Features used · {modelInfo.features.length}</span>
-              <div>{modelInfo.features.map((feature) => <em key={feature}>{formatFeatureName(feature)}</em>)}</div>
+        <div className="model-info-items">
+          <article>
+            <strong>XGBoost</strong>
+            <p>A machine learning model used to estimate congestion percentage.</p>
+          </article>
+          <article>
+            <strong>SHAP</strong>
+            <p>An explainability method that shows which features influenced the prediction.</p>
+          </article>
+          <article>
+            <strong>Reasoning trace</strong>
+            <p>A saved explanation of one prediction for audit and review.</p>
+          </article>
+          {modelInfo && (
+            <article>
+              <strong>{modelInfo.features.length} model features</strong>
+              <p>{modelInfo.prototype_note}</p>
             </article>
-            <p className="prototype-note">{modelInfo.prototype_note}</p>
-          </div>
-        ) : (
-          <div className="feed-empty">
-            <strong>Model information unavailable</strong>
-            <span>Confirm the backend exposes /api/v1/model-info.</span>
-          </div>
-        )}
+          )}
+        </div>
       </section>
 
       <footer className="app-footer">
-        <span>Ahmedabad XAI Traffic Intelligence</span>
+        <span>This is a research prototype using processed Ahmedabad-style traffic features. It demonstrates explainable traffic prediction, not a live city deployment.</span>
         <span>Model xgboost_v1 · Reasoning layer SHAP · API {API_BASE.replace("http://", "")}</span>
       </footer>
     </main>
