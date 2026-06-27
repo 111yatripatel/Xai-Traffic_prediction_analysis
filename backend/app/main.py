@@ -1,7 +1,9 @@
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 import joblib
 import numpy as np
@@ -108,6 +110,8 @@ class PredictionRequest(BaseModel):
     hour: int = Field(default=8, ge=0, le=23)
     is_rain: bool = False
     is_festival: bool = False
+    speed_mode: Literal["automatic", "manual"] = "automatic"
+    current_speed: float | None = None
 
 
 DISPLAY_NAMES = {
@@ -333,6 +337,60 @@ def apply_scenario(
     return sample_row
 
 
+def build_features(
+    corridor_name: str,
+    hour: int,
+    is_rain: bool,
+    is_festival: bool,
+    speed_mode: Literal["automatic", "manual"] = "automatic",
+    current_speed: float | None = None,
+) -> pd.DataFrame:
+    corridor_rows = df[df["corridor_name"] == corridor_name]
+    if corridor_rows.empty:
+        raise HTTPException(status_code=404, detail="No data found for corridor")
+
+    seed_source = f"{corridor_name}|{hour}"
+    seed = int(hashlib.sha256(seed_source.encode("utf-8")).hexdigest()[:8], 16)
+    sample_row = corridor_rows.sample(1, random_state=seed).copy()
+    sample_row = apply_scenario(sample_row, hour, is_rain, is_festival)
+
+    if speed_mode == "manual":
+        if current_speed is None:
+            raise HTTPException(
+                status_code=422,
+                detail="current_speed is required when speed_mode is manual",
+            )
+
+        freeflow_speed = float(sample_row["freeflow_speed"].iloc[0])
+        if current_speed <= 0:
+            raise HTTPException(
+                status_code=422,
+                detail="current_speed must be positive",
+            )
+        if current_speed > freeflow_speed:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "current_speed cannot exceed the corridor free-flow speed "
+                    f"({freeflow_speed:g})"
+                ),
+            )
+
+        sample_row["current_speed"] = float(current_speed)
+        if "congestion_pct" in sample_row.columns:
+            sample_row["congestion_pct"] = round(
+                max(0.0, (1 - float(current_speed) / freeflow_speed) * 100),
+                2,
+            )
+        if "severity" in sample_row.columns:
+            sample_row["severity"] = get_severity(
+                float(sample_row["congestion_pct"].iloc[0])
+            )
+
+    sample_row["speed_mode"] = speed_mode
+    return sample_row
+
+
 def build_trace(sample_row: pd.DataFrame) -> dict:
     model_input = sample_row[features]
     prediction = float(np.clip(model.predict(model_input)[0], 0.0, 100.0))
@@ -373,6 +431,9 @@ def build_trace(sample_row: pd.DataFrame) -> dict:
     )
 
     trace_id = str(uuid.uuid4())
+    speed_mode = str(sample_row.get("speed_mode", pd.Series(["automatic"])).iloc[0])
+    current_speed = float(sample_row["current_speed"].iloc[0])
+    freeflow_speed = float(sample_row["freeflow_speed"].iloc[0])
     trace = {
         "trace_id": trace_id,
         "segment_id": str(sample_row["corridor_name"].iloc[0]),
@@ -381,6 +442,10 @@ def build_trace(sample_row: pd.DataFrame) -> dict:
             "congestion_pct": round(prediction, 2),
             "label": severity,
         },
+        "severity": severity,
+        "speed_mode": speed_mode,
+        "current_speed": round(current_speed, 2),
+        "freeflow_speed": round(freeflow_speed, 2),
         "model_version": "xgboost_v1",
         "base_value": round(float(base_value), 4),
         "shap_values": top_contributors,
@@ -395,6 +460,12 @@ def build_trace(sample_row: pd.DataFrame) -> dict:
             "Congestion could reduce if current speed increases, "
             "rush-hour pressure reduces, or rain/festival effect is absent."
         ),
+        "feature_snapshot": {
+            column: make_json_safe(model_input[column].iloc[0])
+            for column in model_input.columns
+        } | {
+            "speed_mode": speed_mode,
+        },
         "input_snapshot": {
             column: make_json_safe(sample_row[column].iloc[0])
             for column in sample_row.columns
@@ -479,15 +550,13 @@ def predict(request: PredictionRequest):
             detail=f"Corridor not found. Available corridors: {corridor_names}",
         )
 
-    corridor_rows = df[df["corridor_name"] == request.corridor_name]
-    if corridor_rows.empty:
-        raise HTTPException(status_code=404, detail="No data found for corridor")
-
-    sample_row = apply_scenario(
-        corridor_rows.sample(1).copy(),
+    sample_row = build_features(
+        request.corridor_name,
         request.hour,
         request.is_rain,
         request.is_festival,
+        request.speed_mode,
+        request.current_speed,
     )
     trace = build_trace(sample_row)
 
@@ -508,18 +577,8 @@ def get_dashboard(
     corridors = []
 
     for corridor_name in corridor_names:
-        corridor_rows = df[df["corridor_name"] == corridor_name]
-        matching_hour_rows = corridor_rows[corridor_rows["hour"] == hour]
-        source_rows = (
-            matching_hour_rows
-            if not matching_hour_rows.empty
-            else corridor_rows
-        )
-        if source_rows.empty:
-            continue
-
-        sample_row = apply_scenario(
-            source_rows.tail(1).copy(),
+        sample_row = build_features(
+            corridor_name,
             hour,
             is_rain,
             is_festival,
@@ -535,6 +594,10 @@ def get_dashboard(
             "explanation": trace["lime_explanation"],
             "top_factors": trace["shap_values"],
             "trace_id": trace["trace_id"],
+            "speed_mode": trace["speed_mode"],
+            "current_speed": trace["current_speed"],
+            "freeflow_speed": trace["freeflow_speed"],
+            "feature_snapshot": trace["feature_snapshot"],
         })
 
     return {

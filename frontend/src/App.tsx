@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 const API_BASE = "http://127.0.0.1:8000";
@@ -6,6 +6,7 @@ const THEME_STORAGE_KEY = "xai-traffic-theme";
 
 type Severity = "LOW" | "MEDIUM" | "HIGH" | "SEVERE";
 type Theme = "dark" | "light";
+type SpeedMode = "automatic" | "manual";
 
 type ShapFactor = {
   feature: string;
@@ -24,6 +25,9 @@ type CorridorDashboardItem = {
   top_factors: ShapFactor[];
   trace_id: string;
   confidence: number | null;
+  current_speed?: number;
+  freeflow_speed?: number;
+  feature_snapshot?: FeatureSnapshot;
 };
 
 type DashboardResponse = {
@@ -62,6 +66,10 @@ type PredictionResponse = {
   counterfactual?: string;
   confidence?: number | null;
   predicted_at?: string;
+  speed_mode?: SpeedMode;
+  current_speed?: number;
+  freeflow_speed?: number;
+  feature_snapshot?: FeatureSnapshot;
 };
 
 type FullTraceResponse = {
@@ -76,6 +84,10 @@ type FullTraceResponse = {
   shap_values: ShapFactor[];
   counterfactual: string;
   confidence: number | null;
+  speed_mode?: SpeedMode;
+  current_speed?: number;
+  freeflow_speed?: number;
+  feature_snapshot?: FeatureSnapshot;
 };
 
 type TraceListItem = {
@@ -127,6 +139,9 @@ type ReasoningView = {
   counterfactual: string;
   confidence?: number | null;
   predictedAt?: string;
+  speedMode?: SpeedMode;
+  currentSpeed?: number;
+  freeflowSpeed?: number;
 };
 
 type DemoPreset = {
@@ -135,6 +150,19 @@ type DemoPreset = {
   hour: number;
   isRain: boolean;
   isFestival: boolean;
+};
+
+type FeatureSnapshot = {
+  current_speed?: number;
+  freeflow_speed?: number;
+  speed_mode?: SpeedMode;
+  hour?: number;
+  is_rain?: number | boolean;
+  is_festival?: number | boolean;
+  is_morning_rush?: number | boolean;
+  is_evening_rush?: number | boolean;
+  is_school_hour?: number | boolean;
+  corridor_id?: number;
 };
 
 const DISPLAY_NAMES: Record<string, string> = {
@@ -147,6 +175,23 @@ const DISPLAY_NAMES: Record<string, string> = {
   Maninagar: "Maninagar",
   Stadium_Motera: "Stadium Motera",
 };
+
+const FREE_FLOW_SPEEDS: Record<string, number> = {
+  SG_Highway: 70,
+  Ring_Road_132ft: 60,
+  CG_Road: 50,
+  Ashram_Road: 50,
+  Sardar_Patel_Ring: 80,
+  Narol_Naroda: 70,
+  Maninagar: 40,
+  Stadium_Motera: 60,
+};
+
+const MANUAL_SPEED_DEMOS = [
+  { label: "Heavy Traffic", speed: 25 },
+  { label: "Moderate Traffic", speed: 45 },
+  { label: "Near Free-flow", speed: 65 },
+] as const;
 
 const MAP_ROADS = [
   { id: "Sardar_Patel_Ring", path: "M 76 163 C 93 74, 175 35, 286 39 C 404 43, 482 104, 493 198 C 505 291, 429 356, 316 370 C 205 384, 103 340, 69 260 C 51 218, 57 188, 76 163 Z", label: [391, 64] },
@@ -217,6 +262,35 @@ function formatHourContext(hour: number) {
   return `${String(hour).padStart(2, "0")}:00 Evening`;
 }
 
+function clampSpeed(speed: number, freeflowSpeed: number) {
+  return Math.min(Math.max(Math.round(speed), 5), Math.max(5, Math.floor(freeflowSpeed)));
+}
+
+function getTrafficPressure(currentSpeed: number, freeflowSpeed: number) {
+  const ratio = freeflowSpeed > 0 ? currentSpeed / freeflowSpeed : 0;
+  if (ratio < 0.45) return "High pressure";
+  if (ratio < 0.72) return "Moderate pressure";
+  return "Light pressure";
+}
+
+function getFlowLabel(currentSpeed: number, freeflowSpeed: number) {
+  const ratio = freeflowSpeed > 0 ? currentSpeed / freeflowSpeed : 0;
+  if (ratio < 0.45) return "Slow traffic";
+  if (ratio < 0.72) return "Moderate flow";
+  return "Near free-flow";
+}
+
+function getSpeedCounterfactual(reasoning: ReasoningView) {
+  if (!reasoning.currentSpeed || !reasoning.freeflowSpeed) {
+    return reasoning.counterfactual;
+  }
+  const targetSpeed = Math.min(reasoning.freeflowSpeed, Math.ceil(reasoning.currentSpeed + 11));
+  if (targetSpeed <= reasoning.currentSpeed) {
+    return reasoning.counterfactual;
+  }
+  return `Increasing current speed from ${Math.round(reasoning.currentSpeed)} to ${Math.round(targetSpeed)} km/h may reduce predicted congestion.`;
+}
+
 function getInitialTheme(): Theme {
   try {
     return localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
@@ -276,6 +350,8 @@ function App() {
   const [hour, setHour] = useState(8);
   const [isRain, setIsRain] = useState(true);
   const [isFestival, setIsFestival] = useState(false);
+  const [speedMode, setSpeedMode] = useState<SpeedMode>("automatic");
+  const [manualSpeed, setManualSpeed] = useState(39);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [traces, setTraces] = useState<TraceListItem[]>([]);
@@ -287,11 +363,26 @@ function App() {
   const [feedsLoading, setFeedsLoading] = useState(true);
   const [apiOnline, setApiOnline] = useState(false);
   const [error, setError] = useState("");
+  const predictionRequestId = useRef(0);
+  const predictionAbortController = useRef<AbortController | null>(null);
 
   const corridorLookup = useMemo(
     () => new Map(dashboard?.corridors.map((corridor) => [corridor.corridor_name, corridor]) ?? []),
     [dashboard],
   );
+  const activeDashboardCorridor = corridorLookup.get(activeCorridor);
+  const selectedFreeflowSpeed = (
+    activeDashboardCorridor?.freeflow_speed
+    ?? activeDashboardCorridor?.feature_snapshot?.freeflow_speed
+    ?? reasoning?.freeflowSpeed
+    ?? FREE_FLOW_SPEEDS[activeCorridor]
+    ?? 70
+  );
+  const boundedManualSpeed = clampSpeed(manualSpeed, selectedFreeflowSpeed);
+  const speedDeficit = Math.max(0, selectedFreeflowSpeed - boundedManualSpeed);
+  const speedRatio = Math.min(100, Math.max(0, (boundedManualSpeed / selectedFreeflowSpeed) * 100));
+  const predictedCurrentSpeed = reasoning?.currentSpeed ?? activeDashboardCorridor?.current_speed ?? activeDashboardCorridor?.feature_snapshot?.current_speed;
+  const predictedFreeflowSpeed = reasoning?.freeflowSpeed ?? selectedFreeflowSpeed;
 
   const loadDashboard = useCallback(async () => {
     setDashboardLoading(true);
@@ -305,21 +396,6 @@ function App() {
       const data = await getJson<DashboardResponse>(`/api/v1/dashboard?${query}`);
       setApiOnline(true);
       setDashboard(data);
-      const active = data.corridors.find((item) => item.corridor_name === activeCorridor) ?? data.corridors[0];
-      if (active) {
-        setActiveCorridor(active.corridor_name);
-        setReasoning({
-          traceId: active.trace_id,
-          corridorName: active.corridor_name,
-          congestionPct: active.congestion_pct,
-          severity: active.severity,
-          explanation: active.explanation,
-          factors: active.top_factors,
-          counterfactual: "Select this corridor to generate a focused counterfactual analysis.",
-          confidence: active.confidence,
-          predictedAt: data.generated_at,
-        });
-      }
       const traceData = await getJson<TraceListResponse>("/api/v1/traces?limit=10");
       setTraces(traceData.traces);
     } catch {
@@ -328,7 +404,7 @@ function App() {
     } finally {
       setDashboardLoading(false);
     }
-  }, [activeCorridor, hour, isFestival, isRain]);
+  }, [hour, isFestival, isRain]);
 
   const loadFeeds = useCallback(async () => {
     setFeedsLoading(true);
@@ -375,34 +451,56 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function selectCorridor(
-    corridorName: string,
+  useEffect(() => {
+    setManualSpeed((current) => clampSpeed(current, selectedFreeflowSpeed));
+  }, [selectedFreeflowSpeed]);
+
+  async function runPrediction(
+    corridorName = activeCorridor,
     scenario?: {
       hour: number;
       isRain: boolean;
       isFestival: boolean;
+      speedMode?: SpeedMode;
+      currentSpeed?: number;
     },
   ) {
     const selectedHour = scenario?.hour ?? hour;
     const selectedRain = scenario?.isRain ?? isRain;
     const selectedFestival = scenario?.isFestival ?? isFestival;
+    const selectedSpeedMode = scenario?.speedMode ?? speedMode;
+    const selectedCurrentSpeed = clampSpeed(scenario?.currentSpeed ?? manualSpeed, selectedFreeflowSpeed);
+    predictionAbortController.current?.abort();
+    const controller = new AbortController();
+    predictionAbortController.current = controller;
+    const requestId = predictionRequestId.current + 1;
+    predictionRequestId.current = requestId;
+
     setActiveCorridor(corridorName);
     setDetailLoading(true);
     setError("");
     try {
+      const payload = {
+        corridor_name: corridorName,
+        hour: selectedHour,
+        is_rain: selectedRain,
+        is_festival: selectedFestival,
+        speed_mode: selectedSpeedMode,
+        ...(selectedSpeedMode === "manual" ? { current_speed: selectedCurrentSpeed } : {}),
+      };
       const data = await getJson<PredictionResponse>("/api/v1/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          corridor_name: corridorName,
-          hour: selectedHour,
-          is_rain: selectedRain,
-          is_festival: selectedFestival,
-        }),
+        body: JSON.stringify(payload),
+        signal: controller.signal,
       });
+      if (requestId !== predictionRequestId.current) return;
+
       const congestionPct = data.prediction?.congestion_pct ?? data.congestion_pct ?? 0;
       const severity = data.prediction?.label ?? data.severity ?? data.label ?? "LOW";
       const resultCorridor = data.display_name || data.segment_id || corridorName;
+      const responseCurrentSpeed = data.current_speed ?? data.feature_snapshot?.current_speed;
+      const responseFreeflowSpeed = data.freeflow_speed ?? data.feature_snapshot?.freeflow_speed ?? selectedFreeflowSpeed;
       setReasoning({
         traceId: data.trace_id ?? "pending-trace",
         corridorName: resultCorridor,
@@ -413,14 +511,25 @@ function App() {
         counterfactual: data.counterfactual ?? "No counterfactual suggestion was returned for this prediction.",
         confidence: data.confidence,
         predictedAt: data.predicted_at,
+        speedMode: data.speed_mode ?? selectedSpeedMode,
+        currentSpeed: typeof responseCurrentSpeed === "number" ? responseCurrentSpeed : undefined,
+        freeflowSpeed: typeof responseFreeflowSpeed === "number" ? responseFreeflowSpeed : undefined,
       });
       const traceData = await getJson<TraceListResponse>("/api/v1/traces?limit=10");
+      if (requestId !== predictionRequestId.current) return;
       setTraces(traceData.traces);
-    } catch {
+    } catch (caughtError) {
+      if (caughtError instanceof DOMException && caughtError.name === "AbortError") return;
       setError("The corridor prediction could not be generated.");
     } finally {
-      setDetailLoading(false);
+      if (requestId === predictionRequestId.current) {
+        setDetailLoading(false);
+      }
     }
+  }
+
+  function selectDashboardCorridor(corridorName: string) {
+    setActiveCorridor(corridorName);
   }
 
   async function runPreset(preset: DemoPreset) {
@@ -428,7 +537,25 @@ function App() {
     setHour(preset.hour);
     setIsRain(preset.isRain);
     setIsFestival(preset.isFestival);
-    await selectCorridor(preset.corridorName, preset);
+    setSpeedMode("automatic");
+    await runPrediction(preset.corridorName, { ...preset, speedMode: "automatic" });
+    document.querySelector(".reasoning-panel")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+  async function runManualDemo(speed: number) {
+    const nextSpeed = clampSpeed(speed, selectedFreeflowSpeed);
+    setSpeedMode("manual");
+    setManualSpeed(nextSpeed);
+    await runPrediction(activeCorridor, {
+      hour,
+      isRain,
+      isFestival,
+      speedMode: "manual",
+      currentSpeed: nextSpeed,
+    });
     document.querySelector(".reasoning-panel")?.scrollIntoView({
       behavior: "smooth",
       block: "start",
@@ -436,6 +563,8 @@ function App() {
   }
 
   async function selectTrace(traceId: string) {
+    predictionAbortController.current?.abort();
+    predictionRequestId.current += 1;
     setDetailLoading(true);
     setError("");
     try {
@@ -451,6 +580,9 @@ function App() {
         counterfactual: data.counterfactual,
         confidence: data.confidence,
         predictedAt: data.predicted_at,
+        speedMode: data.speed_mode,
+        currentSpeed: data.current_speed ?? data.feature_snapshot?.current_speed,
+        freeflowSpeed: data.freeflow_speed ?? data.feature_snapshot?.freeflow_speed,
       });
       document.querySelector(".reasoning-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
     } catch {
@@ -613,8 +745,92 @@ function App() {
           <Toggle checked={isRain} onChange={setIsRain} label="Rain" helper="Weather may increase congestion" icon="rain" />
           <Toggle checked={isFestival} onChange={setIsFestival} label="Festival / event" helper="Events affect corridor pressure" icon="event" />
         </div>
+        <div className="speed-mode-panel">
+          <div className="speed-mode-header">
+            <div>
+              <span>Speed mode</span>
+              <strong>{speedMode === "automatic" ? "Automatic Simulation" : "Manual Speed Control"}</strong>
+            </div>
+            <div className="mode-selector" role="group" aria-label="Prediction speed mode">
+              <button
+                className={speedMode === "automatic" ? "active" : ""}
+                type="button"
+                onClick={() => setSpeedMode("automatic")}
+                aria-pressed={speedMode === "automatic"}
+              >
+                Automatic Simulation
+              </button>
+              <button
+                className={speedMode === "manual" ? "active" : ""}
+                type="button"
+                onClick={() => setSpeedMode("manual")}
+                aria-pressed={speedMode === "manual"}
+              >
+                Manual Speed Control
+              </button>
+            </div>
+          </div>
+
+          {speedMode === "automatic" ? (
+            <div className="automatic-speed-note">
+              <p>The system derives a deterministic current speed from the selected scenario.</p>
+              <div>
+                <span>Last current speed</span>
+                <strong>{predictedCurrentSpeed ? `${predictedCurrentSpeed.toFixed(1)} km/h` : "Awaiting prediction"}</strong>
+              </div>
+              <div>
+                <span>Free-flow speed</span>
+                <strong>{predictedFreeflowSpeed.toFixed(0)} km/h</strong>
+              </div>
+            </div>
+          ) : (
+            <div className="manual-speed-control">
+              <div className="manual-speed-top">
+                <label htmlFor="manual-current-speed">
+                  <span>Current Speed</span>
+                  <strong>{boundedManualSpeed} km/h</strong>
+                </label>
+                <em>{getFlowLabel(boundedManualSpeed, selectedFreeflowSpeed)}</em>
+              </div>
+              <input
+                id="manual-current-speed"
+                type="range"
+                min="5"
+                max={Math.floor(selectedFreeflowSpeed)}
+                value={boundedManualSpeed}
+                onChange={(event) => setManualSpeed(Number(event.target.value))}
+              />
+              <div className="speed-context-labels">
+                <span>Slow traffic</span>
+                <span>Moderate flow</span>
+                <span>Near free-flow</span>
+              </div>
+              <div className="speed-comparison-panel">
+                <div>
+                  <span>Current Speed</span>
+                  <strong>{boundedManualSpeed} km/h</strong>
+                </div>
+                <div>
+                  <span>Free-flow Speed</span>
+                  <strong>{selectedFreeflowSpeed.toFixed(0)} km/h</strong>
+                </div>
+                <div>
+                  <span>Speed deficit</span>
+                  <strong>{speedDeficit.toFixed(0)} km/h</strong>
+                </div>
+                <div>
+                  <span>Expected traffic pressure</span>
+                  <strong>{getTrafficPressure(boundedManualSpeed, selectedFreeflowSpeed)}</strong>
+                </div>
+              </div>
+              <div className="speed-meter" aria-hidden="true">
+                <i style={{ width: `${speedRatio}%` }} />
+              </div>
+            </div>
+          )}
+        </div>
         <div className="scenario-actions">
-          <button className="primary-action" onClick={() => void selectCorridor(activeCorridor)} disabled={detailLoading}>
+          <button className="primary-action" onClick={() => void runPrediction()} disabled={detailLoading}>
             {detailLoading ? "Running model" : "Run prediction"}
           </button>
           <button className="refresh-button" onClick={() => void loadDashboard()} disabled={dashboardLoading}>
@@ -642,6 +858,25 @@ function App() {
                 aria-pressed={activePreset?.label === preset.label}
               >
                 {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="manual-demo-panel">
+          <div>
+            <span>Manual comparison demo</span>
+            <small>Try the same scenario with different current speeds.</small>
+          </div>
+          <div>
+            {MANUAL_SPEED_DEMOS.map((demo) => (
+              <button
+                key={demo.label}
+                type="button"
+                onClick={() => void runManualDemo(demo.speed)}
+                disabled={detailLoading}
+              >
+                <strong>{demo.label}</strong>
+                <span>{clampSpeed(demo.speed, selectedFreeflowSpeed)} km/h</span>
               </button>
             ))}
           </div>
@@ -728,7 +963,7 @@ function App() {
                 </div>
                 <div className="ranking-list">
                   {corridorRanking.map((corridor, index) => (
-                    <button key={corridor.corridor_name} onClick={() => void selectCorridor(corridor.corridor_name)}>
+                    <button key={corridor.corridor_name} onClick={() => selectDashboardCorridor(corridor.corridor_name)}>
                       <span className="rank-number">{index + 1}</span>
                       <span className="rank-name">{corridor.display_name}</span>
                       <span className="rank-track"><i className={corridor.severity.toLowerCase()} style={{ width: `${corridor.congestion_pct}%` }} /></span>
@@ -795,11 +1030,11 @@ function App() {
                         road.id === "Sardar_Patel_Ring" ? "outer-ring" : "",
                         road.id === "Ring_Road_132ft" ? "inner-ring" : "",
                       ].filter(Boolean).join(" ")}
-                      onClick={() => void selectCorridor(road.id)}
+                      onClick={() => selectDashboardCorridor(road.id)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") void selectCorridor(road.id);
+                        if (event.key === "Enter" || event.key === " ") selectDashboardCorridor(road.id);
                       }}
                       aria-label={`${DISPLAY_NAMES[road.id]}, ${severity} congestion`}
                     >
@@ -834,7 +1069,7 @@ function App() {
               {reasoning && <span className={`severity-badge ${reasoning.severity.toLowerCase()}`}>{reasoning.severity}</span>}
               <button
                 className="run-prediction-button"
-                onClick={() => void selectCorridor(activeCorridor)}
+                onClick={() => void runPrediction()}
                 disabled={detailLoading}
               >
                 {detailLoading ? "Running model" : "Run prediction"}
@@ -861,10 +1096,33 @@ function App() {
                   <strong>{reasoning.congestionPct.toFixed(1)}<small>%</small></strong>
                 </div>
                 <div className="confidence-block">
-                  <span>Prototype model output</span>
+                  <span>{reasoning.speedMode === "manual" ? "Manual speed input" : "Automatic simulation"}</span>
                   <p className="confidence-status">Model response received</p>
+                  <strong>
+                    {reasoning.currentSpeed ? `${reasoning.currentSpeed.toFixed(1)} km/h` : "Speed ready"}
+                  </strong>
                 </div>
               </div>
+
+              {reasoning.currentSpeed && reasoning.freeflowSpeed && (
+                <div className="speed-result-panel">
+                  <div className="speed-result-header">
+                    <div>
+                      <span>Current speed vs free-flow</span>
+                      <strong>{reasoning.currentSpeed.toFixed(1)} / {reasoning.freeflowSpeed.toFixed(0)} km/h</strong>
+                    </div>
+                    <em>{getTrafficPressure(reasoning.currentSpeed, reasoning.freeflowSpeed)}</em>
+                  </div>
+                  <div className="speed-result-bar" aria-label="Current speed compared with free-flow speed">
+                    <i style={{ width: `${Math.min(100, (reasoning.currentSpeed / reasoning.freeflowSpeed) * 100)}%` }} />
+                  </div>
+                  <div className="speed-result-stats">
+                    <span><b>{reasoning.currentSpeed.toFixed(1)}</b> Current</span>
+                    <span><b>{reasoning.freeflowSpeed.toFixed(0)}</b> Free-flow</span>
+                    <span><b>{Math.max(0, reasoning.freeflowSpeed - reasoning.currentSpeed).toFixed(1)}</b> Deficit</span>
+                  </div>
+                </div>
+              )}
 
               <div className="explanation-block">
                 <span className="block-label">Model interpretation</span>
@@ -913,7 +1171,7 @@ function App() {
               <div className="counterfactual-block">
                 <span className="block-label">What Could Reduce Congestion?</span>
                 <small>Counterfactual explains what would need to change to reduce congestion.</small>
-                <p>{reasoning.counterfactual}</p>
+                <p>{getSpeedCounterfactual(reasoning)}</p>
               </div>
 
               <footer className="trace-footer">
@@ -956,7 +1214,7 @@ function App() {
                 <button
                   className={`corridor-card ${corridor.severity.toLowerCase()} ${activeCorridor === corridor.corridor_name ? "active" : ""}`}
                   key={corridor.corridor_name}
-                  onClick={() => void selectCorridor(corridor.corridor_name)}
+                  onClick={() => selectDashboardCorridor(corridor.corridor_name)}
                 >
                   <div className="corridor-card-top">
                     <span className="road-index">{String(dashboard.corridors.indexOf(corridor) + 1).padStart(2, "0")}</span>
@@ -987,7 +1245,7 @@ function App() {
               : anomalies.length === 0
                 ? <div className="feed-empty"><strong>No active anomalies</strong><span>The monitored network is within expected operating ranges.</span></div>
                 : anomalies.map((anomaly) => (
-                  <button className="alert-item" key={anomaly.id} onClick={() => void selectCorridor(anomaly.corridor_name)}>
+                  <button className="alert-item" key={anomaly.id} onClick={() => selectDashboardCorridor(anomaly.corridor_name)}>
                     <span className={`alert-rail ${anomaly.severity.toLowerCase()}`} />
                     <div className="feed-copy">
                       <div><strong>{anomaly.display_name}</strong><time>{formatTime(anomaly.timestamp)}</time></div>

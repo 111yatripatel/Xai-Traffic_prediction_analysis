@@ -4521,3 +4521,417 @@ html[data-theme="light"] body {
   border-color: var(--border-strong);
   background: #f8faf9;
 }
+
+/* Automatic/manual speed prediction experience */
+.speed-mode-panel,
+.manual-demo-panel {
+  grid-column: 2;
+  border: 1px solid rgba(99, 241, 255, .18);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(89, 210, 255, .12), transparent 22rem),
+    linear-gradient(135deg, rgba(12, 24, 40, .88), rgba(21, 24, 43, .82));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 16px 32px rgba(0, 0, 0, .16);
+}
+
+.speed-mode-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.speed-mode-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.speed-mode-header > div:first-child,
+.manual-demo-panel > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.speed-mode-header span,
+.manual-demo-panel span,
+.automatic-speed-note span,
+.manual-speed-top span,
+.speed-comparison-panel span,
+.speed-result-header span,
+.speed-result-stats span {
+  color: rgba(191, 231, 255, .7);
+  font: 600 10px/1.2 "IBM Plex Mono", monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.speed-mode-header strong,
+.manual-speed-top strong,
+.automatic-speed-note strong,
+.speed-comparison-panel strong,
+.speed-result-header strong {
+  color: #f4fbff;
+  font-weight: 700;
+}
+
+.mode-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  width: min(440px, 100%);
+  padding: 5px;
+  border: 1px solid rgba(137, 168, 255, .22);
+  border-radius: 10px;
+  background: rgba(4, 11, 24, .46);
+}
+
+.mode-selector button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(225, 241, 255, .72);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.mode-selector button:hover {
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.mode-selector button.active {
+  background: linear-gradient(135deg, rgba(31, 224, 255, .95), rgba(137, 95, 255, .95));
+  color: #06101d;
+  box-shadow: 0 0 22px rgba(69, 212, 255, .3);
+}
+
+.automatic-speed-note {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(150px, .45fr));
+  gap: 10px;
+}
+
+.automatic-speed-note p,
+.automatic-speed-note div,
+.manual-speed-control,
+.speed-comparison-panel div,
+.manual-demo-panel button,
+.speed-result-panel {
+  border: 1px solid rgba(137, 168, 255, .16);
+  border-radius: 10px;
+  background: rgba(6, 17, 32, .52);
+}
+
+.automatic-speed-note p {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 14px;
+  color: rgba(233, 246, 255, .82);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.automatic-speed-note div {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  padding: 13px;
+}
+
+.automatic-speed-note strong {
+  font: 700 20px/1 "IBM Plex Mono", monospace;
+}
+
+.manual-speed-control {
+  padding: 15px;
+}
+
+.manual-speed-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.manual-speed-top label {
+  display: grid;
+  gap: 5px;
+}
+
+.manual-speed-top strong {
+  font: 700 30px/1 "IBM Plex Mono", monospace;
+}
+
+.manual-speed-top em {
+  align-self: start;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(42, 232, 155, .12);
+  color: #7cf3ba;
+  font: 700 11px "IBM Plex Mono", monospace;
+  font-style: normal;
+}
+
+.manual-speed-control input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  accent-color: #37dfff;
+  cursor: pointer;
+}
+
+.speed-context-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: rgba(203, 225, 244, .64);
+  font-size: 11px;
+}
+
+.speed-comparison-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.speed-comparison-panel div {
+  display: grid;
+  gap: 6px;
+  min-height: 76px;
+  padding: 12px;
+}
+
+.speed-comparison-panel strong {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.speed-meter,
+.speed-result-bar {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+}
+
+.speed-meter {
+  margin-top: 12px;
+}
+
+.speed-meter i,
+.speed-result-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ff665f, #f6b84a 48%, #27eaa1);
+  box-shadow: 0 0 18px rgba(55, 223, 255, .28);
+}
+
+.manual-demo-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, .45fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+}
+
+.manual-demo-panel small {
+  color: rgba(215, 235, 255, .68);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.manual-demo-panel > div:last-child {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.manual-demo-panel button {
+  min-height: 58px;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  color: #eef9ff;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.manual-demo-panel button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(67, 222, 255, .45);
+  box-shadow: 0 0 22px rgba(73, 162, 255, .16);
+}
+
+.manual-demo-panel button:disabled {
+  opacity: .58;
+  cursor: wait;
+}
+
+.manual-demo-panel button strong {
+  font-size: 13px;
+}
+
+.manual-demo-panel button span {
+  color: #52e0ff;
+}
+
+.speed-result-panel {
+  margin: -1px 0 13px;
+  padding: 14px;
+}
+
+.speed-result-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 11px;
+}
+
+.speed-result-header > div {
+  display: grid;
+  gap: 5px;
+}
+
+.speed-result-header strong {
+  color: var(--text-strong);
+  font: 700 18px/1.1 "IBM Plex Mono", monospace;
+}
+
+.speed-result-header em {
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  color: var(--primary);
+  font: 700 10px "IBM Plex Mono", monospace;
+  font-style: normal;
+}
+
+.speed-result-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.speed-result-stats span {
+  color: var(--muted);
+}
+
+.speed-result-stats b {
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.light-theme .speed-mode-panel,
+.light-theme .manual-demo-panel {
+  border-color: #cbdce4;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(52, 145, 166, .1), transparent 20rem),
+    linear-gradient(135deg, #ffffff, #f4f8fb);
+  box-shadow: 0 10px 24px rgba(45, 75, 92, .08);
+}
+
+.light-theme .speed-mode-header span,
+.light-theme .manual-demo-panel span,
+.light-theme .automatic-speed-note span,
+.light-theme .manual-speed-top span,
+.light-theme .speed-comparison-panel span {
+  color: #6b8492;
+}
+
+.light-theme .speed-mode-header strong,
+.light-theme .manual-speed-top strong,
+.light-theme .automatic-speed-note strong,
+.light-theme .speed-comparison-panel strong {
+  color: #153141;
+}
+
+.light-theme .mode-selector {
+  border-color: #d3e0e7;
+  background: #edf4f7;
+}
+
+.light-theme .mode-selector button {
+  color: #526c7a;
+}
+
+.light-theme .mode-selector button.active {
+  color: #062534;
+  box-shadow: 0 8px 20px rgba(50, 143, 166, .2);
+}
+
+.light-theme .automatic-speed-note p,
+.light-theme .automatic-speed-note div,
+.light-theme .manual-speed-control,
+.light-theme .speed-comparison-panel div,
+.light-theme .manual-demo-panel button,
+.light-theme .speed-result-panel {
+  border-color: #d9e5ea;
+  background: rgba(255, 255, 255, .82);
+}
+
+.light-theme .automatic-speed-note p,
+.light-theme .manual-demo-panel small {
+  color: #536a77;
+}
+
+.light-theme .manual-speed-top em {
+  background: #e8f8f1;
+  color: #237a58;
+}
+
+.light-theme .manual-demo-panel button {
+  color: #183442;
+}
+
+.light-theme .manual-demo-panel button span {
+  color: #237b91;
+}
+
+@media (max-width: 1120px) {
+  .speed-mode-panel,
+  .manual-demo-panel {
+    grid-column: 1 / -1;
+  }
+
+  .automatic-speed-note,
+  .speed-comparison-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .speed-mode-header,
+  .manual-speed-top,
+  .speed-result-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mode-selector,
+  .automatic-speed-note,
+  .speed-comparison-panel,
+  .manual-demo-panel,
+  .manual-demo-panel > div:last-child {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-speed-top strong {
+    font-size: 26px;
+  }
+
+  .speed-context-labels {
+    font-size: 10px;
+  }
+}
