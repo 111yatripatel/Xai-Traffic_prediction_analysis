@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 const API_BASE = "http://127.0.0.1:8000";
@@ -287,6 +287,8 @@ function App() {
   const [feedsLoading, setFeedsLoading] = useState(true);
   const [apiOnline, setApiOnline] = useState(false);
   const [error, setError] = useState("");
+  const predictionRequestId = useRef(0);
+  const predictionAbortController = useRef<AbortController | null>(null);
 
   const corridorLookup = useMemo(
     () => new Map(dashboard?.corridors.map((corridor) => [corridor.corridor_name, corridor]) ?? []),
@@ -305,21 +307,6 @@ function App() {
       const data = await getJson<DashboardResponse>(`/api/v1/dashboard?${query}`);
       setApiOnline(true);
       setDashboard(data);
-      const active = data.corridors.find((item) => item.corridor_name === activeCorridor) ?? data.corridors[0];
-      if (active) {
-        setActiveCorridor(active.corridor_name);
-        setReasoning({
-          traceId: active.trace_id,
-          corridorName: active.corridor_name,
-          congestionPct: active.congestion_pct,
-          severity: active.severity,
-          explanation: active.explanation,
-          factors: active.top_factors,
-          counterfactual: "Select this corridor to generate a focused counterfactual analysis.",
-          confidence: active.confidence,
-          predictedAt: data.generated_at,
-        });
-      }
       const traceData = await getJson<TraceListResponse>("/api/v1/traces?limit=10");
       setTraces(traceData.traces);
     } catch {
@@ -328,7 +315,7 @@ function App() {
     } finally {
       setDashboardLoading(false);
     }
-  }, [activeCorridor, hour, isFestival, isRain]);
+  }, [hour, isFestival, isRain]);
 
   const loadFeeds = useCallback(async () => {
     setFeedsLoading(true);
@@ -375,8 +362,8 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function selectCorridor(
-    corridorName: string,
+  async function runPrediction(
+    corridorName = activeCorridor,
     scenario?: {
       hour: number;
       isRain: boolean;
@@ -386,6 +373,12 @@ function App() {
     const selectedHour = scenario?.hour ?? hour;
     const selectedRain = scenario?.isRain ?? isRain;
     const selectedFestival = scenario?.isFestival ?? isFestival;
+    predictionAbortController.current?.abort();
+    const controller = new AbortController();
+    predictionAbortController.current = controller;
+    const requestId = predictionRequestId.current + 1;
+    predictionRequestId.current = requestId;
+
     setActiveCorridor(corridorName);
     setDetailLoading(true);
     setError("");
@@ -399,7 +392,10 @@ function App() {
           is_rain: selectedRain,
           is_festival: selectedFestival,
         }),
+        signal: controller.signal,
       });
+      if (requestId !== predictionRequestId.current) return;
+
       const congestionPct = data.prediction?.congestion_pct ?? data.congestion_pct ?? 0;
       const severity = data.prediction?.label ?? data.severity ?? data.label ?? "LOW";
       const resultCorridor = data.display_name || data.segment_id || corridorName;
@@ -415,12 +411,20 @@ function App() {
         predictedAt: data.predicted_at,
       });
       const traceData = await getJson<TraceListResponse>("/api/v1/traces?limit=10");
+      if (requestId !== predictionRequestId.current) return;
       setTraces(traceData.traces);
-    } catch {
+    } catch (caughtError) {
+      if (caughtError instanceof DOMException && caughtError.name === "AbortError") return;
       setError("The corridor prediction could not be generated.");
     } finally {
-      setDetailLoading(false);
+      if (requestId === predictionRequestId.current) {
+        setDetailLoading(false);
+      }
     }
+  }
+
+  function selectDashboardCorridor(corridorName: string) {
+    setActiveCorridor(corridorName);
   }
 
   async function runPreset(preset: DemoPreset) {
@@ -428,7 +432,7 @@ function App() {
     setHour(preset.hour);
     setIsRain(preset.isRain);
     setIsFestival(preset.isFestival);
-    await selectCorridor(preset.corridorName, preset);
+    await runPrediction(preset.corridorName, preset);
     document.querySelector(".reasoning-panel")?.scrollIntoView({
       behavior: "smooth",
       block: "start",
@@ -436,6 +440,8 @@ function App() {
   }
 
   async function selectTrace(traceId: string) {
+    predictionAbortController.current?.abort();
+    predictionRequestId.current += 1;
     setDetailLoading(true);
     setError("");
     try {
@@ -614,7 +620,7 @@ function App() {
           <Toggle checked={isFestival} onChange={setIsFestival} label="Festival / event" helper="Events affect corridor pressure" icon="event" />
         </div>
         <div className="scenario-actions">
-          <button className="primary-action" onClick={() => void selectCorridor(activeCorridor)} disabled={detailLoading}>
+          <button className="primary-action" onClick={() => void runPrediction()} disabled={detailLoading}>
             {detailLoading ? "Running model" : "Run prediction"}
           </button>
           <button className="refresh-button" onClick={() => void loadDashboard()} disabled={dashboardLoading}>
@@ -728,7 +734,7 @@ function App() {
                 </div>
                 <div className="ranking-list">
                   {corridorRanking.map((corridor, index) => (
-                    <button key={corridor.corridor_name} onClick={() => void selectCorridor(corridor.corridor_name)}>
+                    <button key={corridor.corridor_name} onClick={() => selectDashboardCorridor(corridor.corridor_name)}>
                       <span className="rank-number">{index + 1}</span>
                       <span className="rank-name">{corridor.display_name}</span>
                       <span className="rank-track"><i className={corridor.severity.toLowerCase()} style={{ width: `${corridor.congestion_pct}%` }} /></span>
@@ -795,11 +801,11 @@ function App() {
                         road.id === "Sardar_Patel_Ring" ? "outer-ring" : "",
                         road.id === "Ring_Road_132ft" ? "inner-ring" : "",
                       ].filter(Boolean).join(" ")}
-                      onClick={() => void selectCorridor(road.id)}
+                      onClick={() => selectDashboardCorridor(road.id)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") void selectCorridor(road.id);
+                        if (event.key === "Enter" || event.key === " ") selectDashboardCorridor(road.id);
                       }}
                       aria-label={`${DISPLAY_NAMES[road.id]}, ${severity} congestion`}
                     >
@@ -834,7 +840,7 @@ function App() {
               {reasoning && <span className={`severity-badge ${reasoning.severity.toLowerCase()}`}>{reasoning.severity}</span>}
               <button
                 className="run-prediction-button"
-                onClick={() => void selectCorridor(activeCorridor)}
+                onClick={() => void runPrediction()}
                 disabled={detailLoading}
               >
                 {detailLoading ? "Running model" : "Run prediction"}
@@ -956,7 +962,7 @@ function App() {
                 <button
                   className={`corridor-card ${corridor.severity.toLowerCase()} ${activeCorridor === corridor.corridor_name ? "active" : ""}`}
                   key={corridor.corridor_name}
-                  onClick={() => void selectCorridor(corridor.corridor_name)}
+                  onClick={() => selectDashboardCorridor(corridor.corridor_name)}
                 >
                   <div className="corridor-card-top">
                     <span className="road-index">{String(dashboard.corridors.indexOf(corridor) + 1).padStart(2, "0")}</span>
@@ -987,7 +993,7 @@ function App() {
               : anomalies.length === 0
                 ? <div className="feed-empty"><strong>No active anomalies</strong><span>The monitored network is within expected operating ranges.</span></div>
                 : anomalies.map((anomaly) => (
-                  <button className="alert-item" key={anomaly.id} onClick={() => void selectCorridor(anomaly.corridor_name)}>
+                  <button className="alert-item" key={anomaly.id} onClick={() => selectDashboardCorridor(anomaly.corridor_name)}>
                     <span className={`alert-rail ${anomaly.severity.toLowerCase()}`} />
                     <div className="feed-copy">
                       <div><strong>{anomaly.display_name}</strong><time>{formatTime(anomaly.timestamp)}</time></div>

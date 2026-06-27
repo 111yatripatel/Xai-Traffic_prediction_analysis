@@ -1,3 +1,4 @@
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
@@ -108,6 +109,7 @@ class PredictionRequest(BaseModel):
     hour: int = Field(default=8, ge=0, le=23)
     is_rain: bool = False
     is_festival: bool = False
+    simulate_live_data: bool = False
 
 
 DISPLAY_NAMES = {
@@ -135,6 +137,8 @@ FEATURE_LABELS = {
     "is_school_hour": "School Hour",
     "hour": "Hour of Day",
 }
+
+DEFAULT_WEEKDAY = 2
 
 
 # -----------------------------
@@ -183,6 +187,41 @@ def join_reasons(reasons: list[str]) -> str:
     if len(reasons) == 2:
         return f"{reasons[0]} and {reasons[1]}"
     return f"{', '.join(reasons[:-1])}, and {reasons[-1]}"
+
+
+def get_time_features(hour: int, weekday: int = DEFAULT_WEEKDAY) -> dict:
+    is_weekend = int(weekday >= 5)
+    return {
+        "hour": hour,
+        "weekday": weekday,
+        "is_weekend": is_weekend,
+        "is_morning_rush": int(8 <= hour <= 10 and not is_weekend),
+        "is_evening_rush": int(17 <= hour <= 20 and not is_weekend),
+        "is_school_hour": int(7 <= hour <= 14 and not is_weekend),
+        "hour_sin": float(np.sin(2 * np.pi * hour / 24)),
+        "hour_cos": float(np.cos(2 * np.pi * hour / 24)),
+    }
+
+
+def build_features(
+    corridor_name: str,
+    hour: int,
+    is_rain: bool,
+    is_festival: bool,
+    simulate_live_data: bool = False,
+) -> pd.DataFrame:
+    corridor_rows = df[df["corridor_name"] == corridor_name]
+    if corridor_rows.empty:
+        raise HTTPException(status_code=404, detail="No data found for corridor")
+
+    if simulate_live_data:
+        sample_row = corridor_rows.sample(1).copy()
+        return apply_scenario(sample_row, hour, is_rain, is_festival)
+
+    seed_source = f"{corridor_name}|{hour}"
+    seed = int(hashlib.sha256(seed_source.encode("utf-8")).hexdigest()[:8], 16)
+    sample_row = corridor_rows.sample(1, random_state=seed).copy()
+    return apply_scenario(sample_row, hour, is_rain, is_festival)
 
 
 def build_human_explanation(
@@ -319,13 +358,7 @@ def apply_scenario(
     sample_row["is_rain"] = int(is_rain)
     sample_row["is_festival"] = int(is_festival)
 
-    derived_values = {
-        "is_morning_rush": int(8 <= hour <= 10),
-        "is_evening_rush": int(17 <= hour <= 20),
-        "is_school_hour": int(7 <= hour <= 14),
-        "hour_sin": float(np.sin(2 * np.pi * hour / 24)),
-        "hour_cos": float(np.cos(2 * np.pi * hour / 24)),
-    }
+    derived_values = get_time_features(hour)
     for column, value in derived_values.items():
         if column in sample_row.columns:
             sample_row[column] = value
@@ -395,6 +428,10 @@ def build_trace(sample_row: pd.DataFrame) -> dict:
             "Congestion could reduce if current speed increases, "
             "rush-hour pressure reduces, or rain/festival effect is absent."
         ),
+        "feature_snapshot": {
+            column: make_json_safe(model_input[column].iloc[0])
+            for column in model_input.columns
+        },
         "input_snapshot": {
             column: make_json_safe(sample_row[column].iloc[0])
             for column in sample_row.columns
@@ -479,15 +516,12 @@ def predict(request: PredictionRequest):
             detail=f"Corridor not found. Available corridors: {corridor_names}",
         )
 
-    corridor_rows = df[df["corridor_name"] == request.corridor_name]
-    if corridor_rows.empty:
-        raise HTTPException(status_code=404, detail="No data found for corridor")
-
-    sample_row = apply_scenario(
-        corridor_rows.sample(1).copy(),
+    sample_row = build_features(
+        request.corridor_name,
         request.hour,
         request.is_rain,
         request.is_festival,
+        request.simulate_live_data,
     )
     trace = build_trace(sample_row)
 
@@ -504,25 +538,17 @@ def get_dashboard(
     hour: int = Query(default=8, ge=0, le=23),
     is_rain: bool = False,
     is_festival: bool = False,
+    simulate_live_data: bool = False,
 ):
     corridors = []
 
     for corridor_name in corridor_names:
-        corridor_rows = df[df["corridor_name"] == corridor_name]
-        matching_hour_rows = corridor_rows[corridor_rows["hour"] == hour]
-        source_rows = (
-            matching_hour_rows
-            if not matching_hour_rows.empty
-            else corridor_rows
-        )
-        if source_rows.empty:
-            continue
-
-        sample_row = apply_scenario(
-            source_rows.tail(1).copy(),
+        sample_row = build_features(
+            corridor_name,
             hour,
             is_rain,
             is_festival,
+            simulate_live_data,
         )
         trace = build_trace(sample_row)
 
@@ -535,6 +561,7 @@ def get_dashboard(
             "explanation": trace["lime_explanation"],
             "top_factors": trace["shap_values"],
             "trace_id": trace["trace_id"],
+            "feature_snapshot": trace["feature_snapshot"],
         })
 
     return {
@@ -543,6 +570,7 @@ def get_dashboard(
             "hour": hour,
             "is_rain": is_rain,
             "is_festival": is_festival,
+            "simulate_live_data": simulate_live_data,
         },
         "summary": get_dashboard_summary(corridors),
         # Retained for compatibility with the existing frontend.
